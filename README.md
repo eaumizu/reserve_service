@@ -5,7 +5,7 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 ## 起動
 
 1. `.env.example` を `.env.local` にコピーし、Supabase Project URL、anon key、**server 専用** service-role key を設定する。
-2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、続いて `supabase/seed.sql` を実行する。
+2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、`supabase/migrations/0002_validate_reservation_schedule.sql`、`supabase/migrations/0003_grant_service_role_table_access.sql`、続いて `supabase/seed.sql` を順に実行する。
 3. `npm install`、`npm run dev` を実行して `http://localhost:3000` を開く。
 
 `/` はお客様用の予約フロー、`/admin` は予約一覧の骨格です。公開用 `POST /api/reservations` は `web` のみを受け付けます。手動登録用 `POST /api/admin/reservations` は Supabase Auth の Bearer token と `app_metadata` の `store_id`、`role: staff | admin` を確認してから `phone` / `walk_in` / `admin` を受け付けます。画面上のログイン・手動登録フォームは次の実装単位です。
