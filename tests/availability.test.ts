@@ -1,0 +1,3 @@
+import { describe, expect, it } from "vitest";
+import { findAvailableStarts, intervalsOverlap } from "../lib/reservations/availability";
+describe("availability engine",()=>{it("removes starts that conflict with buffers",()=>{const d=(v:string)=>new Date(`2026-10-10T${v}:00Z`);const slots=findAvailableStarts({open:[{start:d("09:00"),end:d("11:00")}],occupied:[{start:d("09:50"),end:d("10:30")}],durationMinutes:30,bufferBefore:0,bufferAfter:10,intervalMinutes:30});expect(slots.map(x=>x.toISOString().slice(11,16))).toEqual(["09:00"]);});it("uses half-open intervals",()=>expect(intervalsOverlap({start:new Date(0),end:new Date(10)},{start:new Date(10),end:new Date(20)})).toBe(false));});
