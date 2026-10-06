@@ -1,18 +1,58 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { authorizeStaff, supabaseServer, query } = vi.hoisted(() => ({
-  authorizeStaff: vi.fn(), supabaseServer: vi.fn(),
+const { authorizeStaff, supabaseServer, query, rpc } = vi.hoisted(() => ({
+  authorizeStaff: vi.fn(), supabaseServer: vi.fn(), rpc: vi.fn(),
   query: { select: vi.fn(), eq: vi.fn(), order: vi.fn(), limit: vi.fn() },
 }));
 vi.mock("../lib/admin-auth", () => ({ authorizeStaff }));
 vi.mock("../lib/supabase-server", () => ({ supabaseServer }));
-import { GET } from "../app/api/admin/reservations/route";
+import { GET, POST } from "../app/api/admin/reservations/route";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  supabaseServer.mockReturnValue({ from: () => query });
+  supabaseServer.mockReturnValue({ from: () => query, rpc });
   query.select.mockReturnValue(query); query.eq.mockReturnValue(query); query.order.mockReturnValue(query);
+});
+
+const storeId = "11111111-1111-1111-1111-111111111111";
+const input = { storeId, serviceId: "55555555-5555-5555-5555-555555555555", staffId: "22222222-2222-2222-2222-222222222222", startAt: "2030-01-01T10:00:00+09:00", customerName: " 確認用 ", customerPhone: " 09000000000 ", source: "phone" };
+function post(body: unknown) {
+  return POST(new NextRequest("http://localhost/api/admin/reservations", {
+    method: "POST", headers: { authorization: "Bearer token", "content-type": "application/json" }, body: JSON.stringify(body),
+  }));
+}
+describe("manual booking API", () => {
+  it("rejects unauthenticated booking without writing", async () => {
+    authorizeStaff.mockResolvedValue(null);
+    expect((await post(input)).status).toBe(401);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("rejects booking into another store", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    expect((await post({ ...input, storeId: "other-store" })).status).toBe(403);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it.each([{ customerName: " " }, { customerPhone: 123 }, { staffId: "bad-id" }, { startAt: "2030-01-01T10:00" }, { note: {} }])("rejects invalid input before writing", async invalid => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    expect((await post({ ...input, ...invalid })).status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it.each(["phone", "walk_in", "admin"])("creates %s booking through the atomic DB function", async source => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    rpc.mockResolvedValue({ data: { id: "reservation" }, error: null });
+    expect((await post({ ...input, source })).status).toBe(201);
+    expect(rpc).toHaveBeenCalledWith("create_reservation_atomic", expect.objectContaining({
+      p_store_id: storeId, p_source: source, p_start_at: "2030-01-01T10:00:00+09:00", p_customer_name: "確認用", p_customer_phone: "09000000000",
+    }));
+  });
+  it.each(["outside_business_hours", "time_slot_unavailable"])("rejects %s from database validation", async message => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    rpc.mockResolvedValue({ data: null, error: { message } });
+    const response = await post(input);
+    expect(response.status).toBe(409);
+    expect(await response.json()).not.toHaveProperty("reservation");
+  });
 });
 describe("admin reservations API", () => {
   it("never reads reservation data without staff authorization", async () => {

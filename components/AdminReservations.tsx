@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { useEffect, useState, type FormEvent } from "react";
+import { AdminBookingForm } from "./AdminBookingForm";
 
 type Reservation = {
   id: string; start_at: string; status: string; source: string;
@@ -84,6 +85,7 @@ export function AdminReservations() {
       <button className="primary" disabled={busy} type="submit">{busy ? "確認中…" : "ログイン"}</button>
     </form> : <>
       <div className="grid"><button disabled={busy} onClick={refresh}>更新</button><button disabled={busy} onClick={logout}>ログアウト</button></div>
+      <AdminBookingForm auth={auth} onCreated={refresh} onBusy={setBusy} />
       <p className="muted">日時はすべて日本時間です。最新100件を表示しています。</p>
       <div style={{ overflowX: "auto" }}><table className="admin-table">
         <thead><tr><th>日時</th><th>お客様</th><th>メニュー</th><th>担当</th><th>状態</th><th>経路</th></tr></thead>
