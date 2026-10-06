@@ -3,16 +3,63 @@ import { NextRequest } from "next/server";
 
 const { authorizeStaff, supabaseServer, query, rpc } = vi.hoisted(() => ({
   authorizeStaff: vi.fn(), supabaseServer: vi.fn(), rpc: vi.fn(),
-  query: { select: vi.fn(), eq: vi.fn(), order: vi.fn(), limit: vi.fn() },
+  query: { select: vi.fn(), eq: vi.fn(), order: vi.fn(), limit: vi.fn(), update: vi.fn(), maybeSingle: vi.fn() },
 }));
 vi.mock("../lib/admin-auth", () => ({ authorizeStaff }));
 vi.mock("../lib/supabase-server", () => ({ supabaseServer }));
-import { GET, POST } from "../app/api/admin/reservations/route";
+import { GET, POST, PATCH } from "../app/api/admin/reservations/route";
 
 beforeEach(() => {
   vi.resetAllMocks();
   supabaseServer.mockReturnValue({ from: () => query, rpc });
   query.select.mockReturnValue(query); query.eq.mockReturnValue(query); query.order.mockReturnValue(query);
+  query.update.mockReturnValue(query);
+});
+
+const reservationId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+function patch(body: unknown) {
+  return PATCH(new NextRequest("http://localhost/api/admin/reservations", {
+    method: "PATCH", headers: { authorization: "Bearer token", "content-type": "application/json" }, body: JSON.stringify(body),
+  }));
+}
+describe("reservation cancellation", () => {
+  it("rejects an unauthenticated cancellation without touching the DB", async () => {
+    authorizeStaff.mockResolvedValue(null);
+    expect((await patch({ reservationId, status: "cancelled" })).status).toBe(401);
+    expect(supabaseServer).not.toHaveBeenCalled();
+  });
+  it.each([null, {}, { reservationId: "bad-id", status: "cancelled" }, { reservationId, status: "confirmed" }, { reservationId, status: "completed" }])("rejects invalid requests and arbitrary status transitions", async body => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    expect((await patch(body)).status).toBe(400);
+    expect(query.update).not.toHaveBeenCalled();
+  });
+  it("atomically scopes cancellation to the verified store and confirmed status, retaining the record", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    query.maybeSingle.mockResolvedValue({ data: { id: reservationId, status: "cancelled" }, error: null });
+    const response = await patch({ reservationId, status: "cancelled", storeId: "untrusted-store", customerName: "tampered" });
+    expect(response.status).toBe(200);
+    const update = query.update.mock.calls[0][0];
+    expect(update).toEqual({ status: "cancelled", updated_at: expect.any(String) });
+    expect(Number.isFinite(Date.parse(update.updated_at))).toBe(true);
+    expect(query.eq.mock.calls).toEqual([["id", reservationId], ["store_id", storeId], ["status", "confirmed"]]);
+    expect(query.maybeSingle).toHaveBeenCalledOnce();
+    expect(await response.json()).toEqual({ reservation: { id: reservationId, status: "cancelled" } });
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+  it("returns a generic conflict for another store, missing reservation or changed status", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    query.maybeSingle.mockResolvedValue({ data: null, error: null });
+    const response = await patch({ reservationId, status: "cancelled" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).not.toHaveProperty("reservation");
+  });
+  it("does not expose internal database errors", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    query.maybeSingle.mockResolvedValue({ data: null, error: { message: "private database detail" } });
+    const response = await patch({ reservationId, status: "cancelled" });
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("private database detail");
+  });
 });
 
 const storeId = "11111111-1111-1111-1111-111111111111";
