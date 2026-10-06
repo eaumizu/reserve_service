@@ -5,10 +5,33 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 ## 起動
 
 1. `.env.example` を `.env.local` にコピーし、Supabase Project URL、anon key、**server 専用** service-role key を設定する。
-2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、続いて `supabase/seed.sql` を実行する。
+2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、`supabase/migrations/0002_validate_reservation_schedule.sql`、`supabase/migrations/0003_grant_service_role_table_access.sql`、続いて `supabase/seed.sql` を順に実行する。
 3. `npm install`、`npm run dev` を実行して `http://localhost:3000` を開く。
 
-`/` はお客様用の予約フロー、`/admin` は予約一覧の骨格です。公開用 `POST /api/reservations` は `web` のみを受け付けます。手動登録用 `POST /api/admin/reservations` は Supabase Auth の Bearer token と `app_metadata` の `store_id`、`role: staff | admin` を確認してから `phone` / `walk_in` / `admin` を受け付けます。画面上のログイン・手動登録フォームは次の実装単位です。
+`/` はお客様用の予約フロー、`/admin` はメールアドレス・パスワードでログインするスタッフ向け予約一覧です。予約データはHTMLへ埋め込まず、認証済みユーザーの `app_metadata.store_id` と `role: staff | admin` をサーバーで検証した後に、その店舗の最新100件だけを取得します。ログイン情報はメモリ内だけに保持するため、ページ再読み込み時は再ログインします。
+
+公開用 `POST /api/reservations` は `web` のみを受け付けます。手動登録用 `POST /api/admin/reservations` にも同じ認証を適用し、`phone` / `walk_in` / `admin` を受け付けます。手動登録フォームは未実装です。
+
+## 初期管理者の登録
+
+1. Supabase Dashboard の Authentication → Users → Add user → Create new user で管理者のメールアドレス・パスワードを登録します。Auto Confirm を選択するか、メール確認を完了してください。
+2. 作成したユーザーの UUID をコピーします。Supabaseアカウント自体のログインとは別のアプリ用ユーザーです。
+3. SQL Editor で以下の `管理者のユーザーUUID` を置き換えて実行します。権限は本人が編集可能な `user_metadata` ではなく、管理者専用の `app_metadata` に設定します。
+
+```sql
+update auth.users
+set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb)
+  || jsonb_build_object(
+    'role', 'admin',
+    'store_id', '11111111-1111-1111-1111-111111111111'
+  )
+where id = '管理者のユーザーUUID'::uuid;
+```
+
+4. 更新版がデプロイされたURLの `/admin` を開き、登録したメールアドレスとパスワードでログインします。
+5. ログアウト後、予約一覧が消えることを確認します。未ログインで `/api/admin/reservations` にアクセスすると401を返します。
+
+Vercelが `main` をProductionブランチにしている場合、`work` ブランチへのpushはPreviewだけを更新します。本番URLを保護するにはこの変更を `main` に反映し、Productionデプロイの完了を確認してください。
 
 ## 検証
 
