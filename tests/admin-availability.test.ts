@@ -18,9 +18,9 @@ beforeEach(() => {
   settingsError = false; conflictsError = false; assigned = true; queries.length = 0;
   from.mockReset();
   from.mockImplementation(table => {
-    const q = { table, fields: "", select: vi.fn(), eq: vi.fn(), lt: vi.fn(), gt: vi.fn(), maybeSingle: vi.fn(), then: vi.fn() };
+    const q = { table, fields: "", select: vi.fn(), eq: vi.fn(), neq: vi.fn(), lt: vi.fn(), gt: vi.fn(), maybeSingle: vi.fn(), then: vi.fn() };
     q.select.mockImplementation(fields => { q.fields = fields; return q; });
-    q.eq.mockReturnValue(q); q.lt.mockReturnValue(q); q.gt.mockReturnValue(q);
+    q.eq.mockReturnValue(q); q.neq.mockReturnValue(q); q.lt.mockReturnValue(q); q.gt.mockReturnValue(q);
     function result() {
       const error = (settingsError && table === "business_hours") || (conflictsError && table === "reservations") ? { message: "DB unavailable" } : null;
       const data = table === "services" ? q.fields.includes("duration_minutes") ? { duration_minutes: 30, buffer_before: 0, buffer_after: 10 } : [{ buffer_before: 0, buffer_after: 10 }]
@@ -71,6 +71,12 @@ describe("Japan-time admin availability", () => {
   it("rejects staff without a matching active assignment", async () => {
     assigned = false;
     expect(await adminAvailableStarts(store, service, staff, "2030-01-01")).toBeNull();
+  });
+  it("excludes only the verified reservation when finding change slots", async () => {
+    await adminAvailableStarts(store, service, staff, "2030-01-01", "current-reservation");
+    const query = from.mock.results.map(result => result.value).find(q => q.table === "reservations");
+    expect(query.neq).toHaveBeenCalledWith("id", "current-reservation");
+    expect(query.eq).toHaveBeenCalledWith("store_id", store);
   });
   it("fails closed when settings or reservations cannot be read", async () => {
     settingsError = true;

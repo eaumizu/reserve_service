@@ -8,7 +8,7 @@ export function isBookingDate(date: string) {
 }
 
 /** Japan-time slots for one authenticated store/staff, including offline services. */
-export async function adminAvailableStarts(storeId: string, serviceId: string, staffId: string, date: string) {
+export async function adminAvailableStarts(storeId: string, serviceId: string, staffId: string, date: string, excludeReservationId?: string) {
   const db = supabaseServer();
   const dayStart = new Date(`${date}T00:00:00+09:00`);
   const dayEnd = new Date(dayStart.getTime() + 86400000);
@@ -28,11 +28,13 @@ export async function adminAvailableStarts(storeId: string, serviceId: string, s
   const maxBefore = Math.max(0, ...(buffersResult.data ?? []).map(s => s.buffer_before));
   const maxAfter = Math.max(0, ...(buffersResult.data ?? []).map(s => s.buffer_after));
   const windowStart = addMinutes(dayStart, -service.buffer_before);
-  const [reservationsResult, blocksResult] = await Promise.all([
-    db.from("reservations").select("start_at,end_at,services(buffer_before,buffer_after)")
+  let conflicts = db.from("reservations").select("start_at,end_at,services(buffer_before,buffer_after)")
       .eq("store_id", storeId).eq("staff_id", staffId).eq("status", "confirmed")
       .lt("start_at", addMinutes(dayEnd, maxBefore).toISOString())
-      .gt("end_at", addMinutes(windowStart, -maxAfter).toISOString()),
+      .gt("end_at", addMinutes(windowStart, -maxAfter).toISOString());
+  if (excludeReservationId) conflicts = conflicts.neq("id", excludeReservationId);
+  const [reservationsResult, blocksResult] = await Promise.all([
+    conflicts,
     db.from("availability_blocks").select("staff_id,start_at,end_at").eq("store_id", storeId)
       .lt("start_at", dayEnd.toISOString()).gt("end_at", windowStart.toISOString()),
   ]);
