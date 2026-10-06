@@ -19,6 +19,33 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** Cancel only a confirmed reservation in the verified staff member's store. */
+export async function PATCH(request: NextRequest) {
+  const headers = { "Cache-Control": "private, no-store" };
+  try {
+    const staff = await authorizeStaff(request.headers.get("authorization"));
+    if (!staff) return NextResponse.json({ error: "管理者またはスタッフのログインが必要です。" }, { status: 401, headers });
+    let body;
+    try { body = await request.json(); }
+    catch { return NextResponse.json({ error: "入力内容を確認してください。" }, { status: 400, headers }); }
+    if (!body || typeof body.reservationId !== "string" ||
+        !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.reservationId) ||
+        body.status !== "cancelled") {
+      return NextResponse.json({ error: "入力内容を確認してください。" }, { status: 400, headers });
+    }
+    // All filters are part of one atomic UPDATE: concurrent status changes cannot be overwritten.
+    const { data, error } = await supabaseServer().from("reservations")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", body.reservationId).eq("store_id", staff.storeId).eq("status", "confirmed")
+      .select("id,status,updated_at").maybeSingle();
+    if (error) throw error;
+    if (!data) return NextResponse.json({ error: "予約が見つからないか、すでに状態が変更されています。一覧を更新してください。" }, { status: 409, headers });
+    return NextResponse.json({ reservation: data }, { headers });
+  } catch {
+    return NextResponse.json({ error: "キャンセルを完了できませんでした。一覧を更新して予約状態を確認してください。" }, { status: 503, headers });
+  }
+}
+
 /** Staff-only endpoint for phone, walk-in, and admin entries. */
 export async function POST(request: NextRequest) {
   try {
