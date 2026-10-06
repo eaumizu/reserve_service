@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const staff = await authorizeStaff(request.headers.get("authorization"));
     if (!staff) return NextResponse.json({ error: "管理者またはスタッフのログインが必要です。" }, { status: 401, headers });
     const { data, error } = await supabaseServer().from("reservations")
-      .select("id,start_at,end_at,status,source,customers(name),services(name),staff(name)")
+      .select("id,service_id,staff_id,start_at,end_at,updated_at,status,source,customers(name),services(name),staff(name)")
       .eq("store_id", staff.storeId)
       .order("start_at", { ascending: false }).limit(100);
     if (error) throw error;
