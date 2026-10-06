@@ -10,7 +10,9 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 
 `/` はお客様用の予約フロー、`/admin` はメールアドレス・パスワードでログインするスタッフ向け予約一覧です。予約データはHTMLへ埋め込まず、認証済みユーザーの `app_metadata.store_id` と `role: staff | admin` をサーバーで検証した後に、その店舗の最新100件だけを取得します。ログイン情報はメモリ内だけに保持するため、ページ再読み込み時は再ログインします。
 
-公開用 `POST /api/reservations` は `web` のみを受け付けます。手動登録用 `POST /api/admin/reservations` にも同じ認証を適用し、`phone` / `walk_in` / `admin` を受け付けます。手動登録フォームは未実装です。
+公開用 `POST /api/reservations` は `web` のみを受け付けます。手動登録用 `POST /api/admin/reservations` にも同じ認証を適用し、`phone` / `walk_in` / `admin` を受け付けます。
+
+ログイン後の `/admin` で電話・店頭・管理予約を登録できます。所属店舗の有効なメニューと対応施術者を選び、開始日時を日本時間で入力します。確認画面から確定すると、Web予約と同じDB関数が営業時間と予約競合を検証します。登録後は一覧が更新されます。管理画面はオンライン予約不可のメニューも選択できます。
 
 ## 初期管理者の登録
 
