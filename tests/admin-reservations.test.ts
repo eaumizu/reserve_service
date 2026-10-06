@@ -93,6 +93,11 @@ describe("manual booking API", () => {
       p_store_id: storeId, p_source: source, p_start_at: "2030-01-01T10:00:00+09:00", p_customer_name: "確認用", p_customer_phone: "09000000000",
     }));
   });
+  it.each(["2030-01-01T10:05:00+09:00", "2030-01-01T10:00:01+09:00"])("rejects minute/second offsets outside 30-minute starts", async startAt => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    expect((await post({ ...input, startAt })).status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+  });
   it.each(["outside_business_hours", "time_slot_unavailable"])("rejects %s from database validation", async message => {
     authorizeStaff.mockResolvedValue({ storeId });
     rpc.mockResolvedValue({ data: null, error: { message } });
