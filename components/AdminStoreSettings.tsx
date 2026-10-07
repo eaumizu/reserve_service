@@ -1,13 +1,23 @@
 "use client";
 
+import { CLOCK_TIMES, DURATION_OPTIONS } from "../lib/reservations/time-grid";
+
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SettingsChange, SettingsHour, SettingsService, SettingsStaff, StoreSettings } from "../lib/store-settings";
 
 type Save = (change: SettingsChange) => Promise<boolean>;
-const newService = () => ({ name: "", duration_minutes: 30, buffer_before: 0, buffer_after: 10, price: 0, active: true, online_bookable: true });
+const newService = () => ({ name: "", duration_minutes: 30, buffer_before: 0, buffer_after: 15, price: 0, active: true, online_bookable: true });
 const weekdays = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
-const times = Array.from({ length: 48 }, (_, index) => `${String(Math.floor(index / 2)).padStart(2, "0")}:${index % 2 ? "30" : "00"}`);
+const times = CLOCK_TIMES;
+
+function MinutesSelect({ value, original, allowZero = false, onChange }: { value: number; original?: number; allowZero?: boolean; onChange: (value: number) => void }) {
+  const options = allowZero ? [0, ...DURATION_OPTIONS] : DURATION_OPTIONS;
+  return <select value={value} onChange={e => onChange(Number(e.target.value))}>
+    {original !== undefined && !options.includes(original) && <option value={original}>{original}分（既存設定）</option>}
+    {options.map(minutes => <option key={minutes} value={minutes}>{minutes}分</option>)}
+  </select>;
+}
 
 function StoreNameEditor({ name, save }: { name: string; save: Save }) {
   const [value, setValue] = useState(name);
@@ -28,9 +38,9 @@ function ServiceEditor({ service, save }: { service?: SettingsService; save: Sav
     <label>メニュー名<input required maxLength={100} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
     <div className="grid">
       <label>料金（円）<input required type="number" min={0} max={10000000} step={1} value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.valueAsNumber })} /></label>
-      <label>施術時間（分）<input required type="number" min={1} max={1440} step={1} value={draft.duration_minutes} onChange={e => setDraft({ ...draft, duration_minutes: e.target.valueAsNumber })} /></label>
-      <label>施術前の準備時間（分）<input required type="number" min={0} max={1440} step={1} value={draft.buffer_before} onChange={e => setDraft({ ...draft, buffer_before: e.target.valueAsNumber })} /></label>
-      <label>施術後の片付け時間（分）<input required type="number" min={0} max={1440} step={1} value={draft.buffer_after} onChange={e => setDraft({ ...draft, buffer_after: e.target.valueAsNumber })} /></label>
+      <label>施術時間<MinutesSelect value={draft.duration_minutes} original={service?.duration_minutes} onChange={value => setDraft({ ...draft, duration_minutes: value })} /></label>
+      <label>施術前の準備時間<MinutesSelect allowZero value={draft.buffer_before} original={service?.buffer_before} onChange={value => setDraft({ ...draft, buffer_before: value })} /></label>
+      <label>施術後の片付け時間<MinutesSelect allowZero value={draft.buffer_after} original={service?.buffer_after} onChange={value => setDraft({ ...draft, buffer_after: value })} /></label>
     </div>
     <label className="checkline"><input type="checkbox" checked={draft.active} onChange={e => setDraft({ ...draft, active: e.target.checked })} />予約受付を有効にする</label>
     <label className="checkline"><input type="checkbox" checked={draft.online_bookable} onChange={e => setDraft({ ...draft, online_bookable: e.target.checked })} />Web予約で公開する</label>

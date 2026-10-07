@@ -1,3 +1,4 @@
+import { CLOCK_TIME_PATTERN } from "./reservations/time-grid";
 export type SettingsService = {
   id: string; name: string; duration_minutes: number; buffer_before: number;
   buffer_after: number; price: number; active: boolean; online_bookable: boolean;
@@ -18,7 +19,7 @@ export type SettingsChange =
   | { kind: "hours"; data: { hours: SettingsHour[] } };
 
 const uuid = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-const time = /^([01]\d|2[0-3]):(00|30)$/;
+const time = CLOCK_TIME_PATTERN;
 const validName = (value: unknown): value is string => typeof value === "string" && !!value.trim() && value.length <= 100;
 const integer = (value: unknown, min: number, max: number): value is number => typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -32,6 +33,8 @@ export function parseSettingsChange(value: unknown): SettingsChange | null {
     if (!validName(data.name) || (data.id !== undefined && (typeof data.id !== "string" || !uuid.test(data.id))) ||
         !integer(data.duration_minutes, 1, 1440) || !integer(data.buffer_before, 0, 1440) || !integer(data.buffer_after, 0, 1440) ||
         !integer(data.price, 0, 10000000) || typeof data.active !== "boolean" || typeof data.online_bookable !== "boolean") return null;
+    // Existing off-grid values may be retained; the DB checks them against the saved row.
+    if (!data.id && [data.duration_minutes, data.buffer_before, data.buffer_after].some(value => value % 15 !== 0)) return null;
     return { kind: "service", data: { ...(data.id ? { id: data.id as string } : {}), name: data.name.trim(),
       duration_minutes: data.duration_minutes, buffer_before: data.buffer_before, buffer_after: data.buffer_after,
       price: data.price, active: data.active, online_bookable: data.online_bookable } };

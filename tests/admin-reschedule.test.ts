@@ -13,6 +13,13 @@ const request = (body: unknown) => POST(new NextRequest("http://localhost/api/ad
 }));
 beforeEach(() => { vi.resetAllMocks(); supabaseServer.mockReturnValue({ rpc }); });
 describe("atomic reservation changes", () => {
+  it.each(["15", "45"])("accepts rescheduling to minute %s", async minute => {
+    authorizeStaff.mockResolvedValue({ storeId: "verified-store" });
+    const startAt = `2030-01-01T10:${minute}:00+09:00`;
+    rpc.mockResolvedValue({ data: { id: input.reservationId, start_at: startAt, staff_id: input.staffId }, error: null });
+    expect((await request({ ...input, startAt })).status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith("reschedule_reservation_atomic", expect.objectContaining({ p_start_at: startAt }));
+  });
   it("blocks unauthenticated changes without a DB call", async () => {
     authorizeStaff.mockResolvedValue(null);
     expect((await request(input)).status).toBe(401);

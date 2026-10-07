@@ -132,7 +132,7 @@ export function AdminRescheduleForm({ auth, reservation, onChanged, onClose, onB
       </select></label>
       {!loading && !error && date && staffId && !slots.length && <p>この日に変更できる時間はありません。</p>}
       {unchanged && <p>変更後の日時または担当者を選んでください。</p>}
-      <p className="muted">30分刻みの空き枠から選択してください。変更に失敗した場合、元の予約はそのまま残ります。</p>
+      <p className="muted">15分刻みの空き枠から選択してください。変更に失敗した場合、元の予約はそのまま残ります。</p>
       <button type="button" disabled={busy || loading || !staffId || !date} onClick={() => { resetSelection(); setVersion(value => value + 1); }}>空き時間を更新</button>
       <div className="grid"><button type="button" disabled={busy} onClick={onClose}>閉じる</button>
         <button type="submit" className="primary" disabled={busy || loading || !valid}>変更内容を確認する</button></div>

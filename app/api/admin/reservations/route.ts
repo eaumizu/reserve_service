@@ -1,3 +1,4 @@
+import { TIME_STEP_MS } from "../../../../lib/reservations/time-grid";
 import { authorizeStaff } from "../../../../lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "../../../../lib/supabase-server";
@@ -65,8 +66,8 @@ export async function POST(request: NextRequest) {
         (body.note !== undefined && (typeof body.note !== "string" || body.note.length > 2000))) {
       return NextResponse.json({ error: "入力内容を確認してください。" }, { status: 400 });
     }
-    if (Date.parse(body.startAt) % 1800000 !== 0) {
-      return NextResponse.json({ error: "開始時間は30分刻みの空き枠から選択してください。" }, { status: 400 });
+    if (Date.parse(body.startAt) % TIME_STEP_MS !== 0) {
+      return NextResponse.json({ error: "開始時間は15分刻みの空き枠から選択してください。" }, { status: 400 });
     }
     const { data, error } = await supabaseServer().rpc("create_reservation_atomic", { p_store_id: staff.storeId, p_service_id: body.serviceId, p_staff_id: body.staffId, p_start_at: body.startAt, p_customer_name: body.customerName.trim(), p_customer_phone: body.customerPhone.trim(), p_source: body.source, p_note: body.note ?? null });
     if (error) return NextResponse.json({ error: error.message.includes("outside_business_hours") ? "営業時間内の枠を指定してください。" : "指定した枠は予約できません。" }, { status: 409 });

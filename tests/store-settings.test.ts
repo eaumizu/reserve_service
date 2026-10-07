@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { parseSettingsChange } from "../lib/store-settings";
-const service = { name: "整体", duration_minutes: 60, buffer_before: 0, buffer_after: 10, price: 6000, active: true, online_bookable: true };
+const service = { name: "整体", duration_minutes: 60, buffer_before: 0, buffer_after: 15, price: 6000, active: true, online_bookable: true };
 describe("store setting validation", () => {
+  it("allows quarter-hour opening and closing", () => {
+    expect(parseSettingsChange({ kind: "hours", data: { hours: [{ weekday: 1, start_time: "09:15", end_time: "18:45" }] } })).not.toBeNull();
+  });
+  it("requires quarter-hour durations for new menus but retains legacy values for DB verification", () => {
+    expect(parseSettingsChange({ kind: "service", data: { ...service, buffer_after: 10 } })).toBeNull();
+    expect(parseSettingsChange({ kind: "service", data: { ...service, duration_minutes: 20 } })).toBeNull();
+    expect(parseSettingsChange({ kind: "service", data: { ...service, duration_minutes: 45, buffer_after: 15 } })).not.toBeNull();
+    expect(parseSettingsChange({ kind: "service", data: { ...service, id: "55555555-5555-5555-5555-555555555555", buffer_after: 10 } })).not.toBeNull();
+  });
   it("accepts a trimmed name without trusting store IDs or timezone", () => {
     expect(parseSettingsChange({ kind: "store", data: { name: " 新店舗 ", store_id: "other", timezone: "UTC" } }))
       .toEqual({ kind: "store", data: { name: "新店舗" } });
@@ -29,7 +38,7 @@ describe("store setting validation", () => {
   });
   it.each([
     [{ weekday: 7, start_time: "09:00", end_time: "18:00" }],
-    [{ weekday: 1, start_time: "09:15", end_time: "18:00" }],
+    [{ weekday: 1, start_time: "09:10", end_time: "18:00" }],
     [{ weekday: 1, start_time: "18:00", end_time: "09:00" }],
     [{ weekday: 1, start_time: "09:00", end_time: "12:00" }, { weekday: 1, start_time: "11:30", end_time: "18:00" }],
   ].map(hours => ({ hours })))("rejects bad weekdays, off-grid times and overlapping periods", ({ hours }) => {

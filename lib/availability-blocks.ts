@@ -1,9 +1,10 @@
+import { CLOCK_TIME_PATTERN } from "./reservations/time-grid";
 import { isBookingDate } from "./reservations/date";
 
 export type AvailabilityBlock = { id: string; staff_id: string | null; start_at: string; end_at: string; reason: string | null };
 export type BlockStaff = { id: string; name: string; active: boolean };
 export const isBlockId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
-const time = /^([01]\d|2[0-3]):(00|30)$/;
+const time = CLOCK_TIME_PATTERN;
 
 /** Accept Japan-time calendar fields, never caller-supplied store IDs or UTC offsets. */
 export function parseAvailabilityBlock(value: unknown) {
