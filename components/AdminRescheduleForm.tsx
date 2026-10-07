@@ -110,10 +110,12 @@ export function AdminRescheduleForm({ auth, reservation, onChanged, onClose, onB
     } finally { setBusy(false); onBusy(false); }
   }
 
-  return <form onSubmit={submit} className="card" aria-label="予約日時・担当者の変更">
+  return <form id="reservation-change-form" onSubmit={submit} className="card reservation-confirmation" aria-label="予約日時・担当者の変更">
     <h2>予約日時・担当者の変更</h2>
     <p>{reservation.customers?.name} 様 ／ {reservation.services?.name}</p>
     <p>変更前：{japanTime(reservation.start_at)}（日本時間） ／ {reservation.staff?.name}</p>
+    {!confirmed && <p>担当者・予約日・空き時間を選び、「変更内容を確認する」へ進んでください。確認後に「変更を確定する」で保存します。</p>}
+    {!options && !optionsError && <p role="status">変更できる担当者を読み込んでいます…</p>}
     {optionsError && <p className="error" role="alert">{optionsError}</p>}
     {error && <p className="error" role="alert">{error}</p>}
     {confirmed ? <>
