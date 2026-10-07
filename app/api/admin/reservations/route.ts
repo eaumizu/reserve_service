@@ -3,18 +3,30 @@ import { authorizeStaff } from "../../../../lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "../../../../lib/supabase-server";
 import type { ReservationInput } from "@/lib/reservations/types";
+import { parseReservationListFilters, RESERVATION_PAGE_SIZE } from "../../../../lib/reservations/list-filters";
 
 export async function GET(request: NextRequest) {
   const headers = { "Cache-Control": "private, no-store" };
   try {
     const staff = await authorizeStaff(request.headers.get("authorization"));
     if (!staff) return NextResponse.json({ error: "管理者またはスタッフのログインが必要です。" }, { status: 401, headers });
-    const { data, error } = await supabaseServer().from("reservations")
+    const filters = parseReservationListFilters(request.nextUrl.searchParams);
+    if (!filters) return NextResponse.json({ error: "日付・スタッフ・表示ページを確認してください。" }, { status: 400, headers });
+    const db = supabaseServer();
+    let query = db.from("reservations")
       .select("id,service_id,staff_id,start_at,end_at,updated_at,status,source,customers(name),services(name),staff(name)")
-      .eq("store_id", staff.storeId)
-      .order("start_at", { ascending: false }).limit(100);
-    if (error) throw error;
-    return NextResponse.json({ reservations: data ?? [], canManageSettings: staff.role === "admin" }, { headers });
+      .eq("store_id", staff.storeId);
+    if (filters.start && filters.end) query = query.gte("start_at", filters.start).lt("start_at", filters.end);
+    if (filters.staffId) query = query.eq("staff_id", filters.staffId);
+    const offset = filters.page * RESERVATION_PAGE_SIZE;
+    const [reservations, roster] = await Promise.all([
+      query.order("start_at", { ascending: true }).order("id", { ascending: true }).range(offset, offset + RESERVATION_PAGE_SIZE),
+      db.from("staff").select("id,name,active").eq("store_id", staff.storeId).order("name").order("id"),
+    ]);
+    if (reservations.error || roster.error) throw new Error("Reservation list read failed");
+    return NextResponse.json({ reservations: (reservations.data ?? []).slice(0, RESERVATION_PAGE_SIZE),
+      staff: roster.data ?? [], hasMore: (reservations.data ?? []).length > RESERVATION_PAGE_SIZE,
+      canManageSettings: staff.role === "admin" }, { headers });
   } catch {
     return NextResponse.json({ error: "予約一覧を取得できませんでした。" }, { status: 503, headers });
   }

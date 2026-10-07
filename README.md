@@ -8,7 +8,7 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、`supabase/migrations/0002_validate_reservation_schedule.sql`、`supabase/migrations/0003_grant_service_role_table_access.sql`、`supabase/migrations/0004_reschedule_reservation_atomic.sql`、`supabase/migrations/0005_store_settings_atomic.sql`、`supabase/migrations/0006_manage_availability_blocks.sql`、`supabase/migrations/0007_fifteen_minute_grid.sql`、続いて `supabase/seed.sql` を順に実行する。
 3. `npm install`、`npm run dev` を実行して `http://localhost:3000` を開く。
 
-`/` はお客様用の予約フロー、`/admin` はメールアドレス・パスワードでログインするスタッフ向け予約一覧です。予約データはHTMLへ埋め込まず、認証済みユーザーの `app_metadata.store_id` と `role: staff | admin` をサーバーで検証した後に、その店舗の最新100件だけを取得します。ログイン情報はメモリ内だけに保持するため、ページ再読み込み時は再ログインします。
+`/` はお客様用の予約フロー、`/admin` はメールアドレス・パスワードでログインするスタッフ向け予約一覧です。予約データはHTMLへ埋め込まず、認証済みユーザーの `app_metadata.store_id` と `role: staff | admin` をサーバーで検証した後に、その店舗の予約だけを取得します。ログイン直後は日本時間の「今日・全スタッフ」を表示します。「今日」「日付指定」「全期間」とスタッフ別の条件を組み合わせ、開始時刻の早い順で確認できます。停止済みスタッフとキャンセル済み予約も履歴として表示します。1ページ100件で前後のページへ進めます。条件変更時は先頭ページへ戻り、登録・変更・キャンセル後は選択中の条件で再取得します。日付は予約開始日の日本時間0時から翌日0時未満で判定します。この一覧改善には追加SQLは不要です。ログイン情報はメモリ内だけに保持するため、ページ再読み込み時は再ログインします。
 
 公開用 `POST /api/reservations` は `web` のみを受け付けます。手動登録用 `POST /api/admin/reservations` にも同じ認証を適用し、`phone` / `walk_in` / `admin` を受け付けます。
 
