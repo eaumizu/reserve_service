@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { AdminBookingForm } from "./AdminBookingForm";
 import { AdminRescheduleForm } from "./AdminRescheduleForm";
 import { AdminStoreSettings } from "./AdminStoreSettings";
+import { AdminAvailabilityBlocks } from "./AdminAvailabilityBlocks";
 import type { AdminReservation as Reservation } from "../lib/reservations/types";
 
 const statuses: Record<string, string> = { confirmed: "確定", cancelled: "キャンセル", completed: "完了", no_show: "来店なし" };
@@ -27,11 +28,12 @@ export function AdminReservations() {
   const [changeTarget, setChangeTarget] = useState<Reservation | null>(null);
   const [canManageSettings, setCanManageSettings] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showBlocks, setShowBlocks] = useState(false);
 
   useEffect(() => {
     if (!auth) return;
     const { data: { subscription } } = auth.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") { setRows([]); setLoggedIn(false); setCancelTarget(null); setChangeTarget(null); setSuccess(""); setCanManageSettings(false); setShowSettings(false); }
+      if (event === "SIGNED_OUT") { setRows([]); setLoggedIn(false); setCancelTarget(null); setChangeTarget(null); setSuccess(""); setCanManageSettings(false); setShowSettings(false); setShowBlocks(false); }
     });
     return () => subscription.unsubscribe();
   }, [auth]);
@@ -50,7 +52,7 @@ export function AdminReservations() {
     }
     setRows(result.reservations);
     setCanManageSettings(result.canManageSettings === true);
-    if (!result.canManageSettings) setShowSettings(false);
+    if (!result.canManageSettings) { setShowSettings(false); setShowBlocks(false); }
     setLoggedIn(true);
   }
 
@@ -76,7 +78,7 @@ export function AdminReservations() {
 
   async function logout() {
     setRows([]); setLoggedIn(false); setError(""); setSuccess(""); setCancelTarget(null); setChangeTarget(null);
-    setCanManageSettings(false); setShowSettings(false);
+    setCanManageSettings(false); setShowSettings(false); setShowBlocks(false);
     await auth!.auth.signOut();
   }
 
@@ -122,11 +124,14 @@ export function AdminReservations() {
       <button className="primary" disabled={busy} type="submit">{busy ? "確認中…" : "ログイン"}</button>
     </form> : <>
       <div className="grid">
-        <button disabled={busy} onClick={async () => { setShowSettings(false); await refresh(); }}>予約一覧を更新</button>
-        {canManageSettings && <button className={showSettings ? "selected" : ""} disabled={busy} onClick={() => { setCancelTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowSettings(!showSettings); }}> {showSettings ? "予約一覧に戻る" : "店舗設定"} </button>}
+        <button disabled={busy} onClick={async () => { setShowSettings(false); setShowBlocks(false); await refresh(); }}>予約一覧を更新</button>
+        {canManageSettings && <>
+          <button className={showSettings ? "selected" : ""} disabled={busy} onClick={() => { setCancelTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowBlocks(false); setShowSettings(!showSettings); }}> {showSettings ? "予約一覧に戻る" : "店舗設定"} </button>
+          <button className={showBlocks ? "selected" : ""} disabled={busy} onClick={() => { setCancelTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowSettings(false); setShowBlocks(!showBlocks); }}> {showBlocks ? "予約一覧に戻る" : "受付停止・臨時休業"} </button>
+        </>}
         <button disabled={busy} onClick={logout}>ログアウト</button>
       </div>
-      {showSettings && canManageSettings ? <AdminStoreSettings auth={auth} onBusy={setBusy} /> : <>
+      {showSettings && canManageSettings ? <AdminStoreSettings auth={auth} onBusy={setBusy} /> : showBlocks && canManageSettings ? <AdminAvailabilityBlocks auth={auth} onBusy={setBusy} /> : <>
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
         <AdminBookingForm auth={auth} onCreated={refresh} onBusy={setBusy} />
       </fieldset>

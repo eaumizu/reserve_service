@@ -5,7 +5,7 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 ## 起動
 
 1. `.env.example` を `.env.local` にコピーし、Supabase Project URL、anon key、**server 専用** service-role key を設定する。
-2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、`supabase/migrations/0002_validate_reservation_schedule.sql`、`supabase/migrations/0003_grant_service_role_table_access.sql`、`supabase/migrations/0004_reschedule_reservation_atomic.sql`、`supabase/migrations/0005_store_settings_atomic.sql`、続いて `supabase/seed.sql` を順に実行する。
+2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、`supabase/migrations/0002_validate_reservation_schedule.sql`、`supabase/migrations/0003_grant_service_role_table_access.sql`、`supabase/migrations/0004_reschedule_reservation_atomic.sql`、`supabase/migrations/0005_store_settings_atomic.sql`、`supabase/migrations/0006_manage_availability_blocks.sql`、続いて `supabase/seed.sql` を順に実行する。
 3. `npm install`、`npm run dev` を実行して `http://localhost:3000` を開く。
 
 `/` はお客様用の予約フロー、`/admin` はメールアドレス・パスワードでログインするスタッフ向け予約一覧です。予約データはHTMLへ埋め込まず、認証済みユーザーの `app_metadata.store_id` と `role: staff | admin` をサーバーで検証した後に、その店舗の最新100件だけを取得します。ログイン情報はメモリ内だけに保持するため、ページ再読み込み時は再ログインします。
@@ -25,6 +25,12 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 `/admin` の管理者（`role: admin`）には「店舗設定」が表示されます。店舗名、メニューの料金・施術時間・前後バッファー・公開状態、施術者名と対応メニュー、曜日別営業時間を編集できます。営業時間は日本時間の30分刻みで、昼休みなど複数の時間帯にも対応します。設定は項目ごとに保存し、実情報が未確定の間はデモ情報で検証できます。店舗名の変更は公開予約ページにも反映されます。施術者の追加はログイン用アカウントの作成とは別です。
 
 既存環境では **`0005_store_settings_atomic.sql` だけを新しいSQLタブで実行** してください。過去のマイグレーションとseedは再実行しません。設定APIは認証ユーザーの所属店舗と管理者権限を確認し、DB関数がスタッフの予約用ロックを取ったうえで更新します。予約履歴のあるメニューの施術時間・バッファーは変更できません（新メニューを追加してください）。既存の未終了・確定済み予約が営業時間外になる変更も拒否します。停止したメニュー・施術者の予約履歴は残り、既存予約の日時変更は停止済みメニューでも可能です。オンライン受付を停止したメニューは古い予約フォームからの確定もDBで拒否します。
+
+## 受付停止・臨時休業
+
+管理者で `/admin` にログインし「受付停止・臨時休業」から、店舗全体または有効な特定スタッフの受付停止を登録・解除できます。日時は日本時間の30分刻みです。「終日」は開始日から終了日までを含め、翌日0時を終了時刻にします。最長366日の複数日にまたがる期間にも対応し、理由は管理画面だけに表示します。一覧は選択した日と重なる期間を最大200件表示します。解除は確認画面を経て、その受付停止の全期間を解除します。過去の設定も表示日を指定して確認できます。
+
+既存環境には **`0006_manage_availability_blocks.sql` のみ追加適用** してください。店舗設定と同じ順序でスタッフの予約ロックを取り、同時予約と競合する登録を防ぎます。確定済み予約の施術・前後バッファーと重なる受付停止は409で拒否し、予約は変更しません。Web・手動登録・日時変更の空き枠取得とDB確定処理が同じ受付停止を参照します。解除後も営業時間・他の受付停止・既存予約があれば予約不可のままです。設定更新の店舗ロックは外部キー参照と共存できる `FOR NO KEY UPDATE` に更新し、予約確定とのロック待ち循環を防ぎます。この追加SQLも予約・顧客データを変更せず、関数を登録・更新します。
 
 ## 初期管理者の登録
 
