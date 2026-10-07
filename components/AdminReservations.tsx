@@ -39,13 +39,17 @@ export function AdminReservations() {
   const [hasMore, setHasMore] = useState(false);
   const loadSequence = useRef(0);
   const confirmationRef = useRef<HTMLElement>(null);
-  const changeFormRef = useRef<HTMLFieldSetElement>(null);
+  const changeDialogRef = useRef<HTMLDialogElement>(null);
   const successRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
-    const target = changeTarget ? changeFormRef.current : statusTarget ? confirmationRef.current : success ? successRef.current : null;
+    const target = statusTarget ? confirmationRef.current : success ? successRef.current : null;
     if (target) { target.focus({ preventScroll: true }); target.scrollIntoView({ block: "center" }); }
-  }, [changeTarget, statusTarget, success]);
+  }, [statusTarget, success]);
+
+  useEffect(() => {
+    if (changeTarget && changeDialogRef.current && !changeDialogRef.current.open) changeDialogRef.current.showModal();
+  }, [changeTarget]);
 
   useEffect(() => {
     if (!auth) return;
@@ -120,11 +124,6 @@ export function AdminReservations() {
 
   function openReservationChange(reservation: Reservation) {
     setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(reservation);
-    // The selected row may already be open; bring it back into view on every click.
-    if (changeTarget?.id === reservation.id) {
-      changeFormRef.current?.focus({ preventScroll: true });
-      changeFormRef.current?.scrollIntoView({ block: "center" });
-    }
   }
 
   async function updateReservationStatus() {
@@ -175,10 +174,14 @@ export function AdminReservations() {
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
         <AdminBookingForm auth={auth} onCreated={refresh} onBusy={setBusy} />
       </fieldset>
-      {changeTarget && <fieldset ref={changeFormRef} tabIndex={-1} aria-label="選択した予約の変更画面" disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
-        <AdminRescheduleForm key={changeTarget.id} auth={auth} reservation={changeTarget}
-          onChanged={reservationChanged} onClose={() => setChangeTarget(null)} onBusy={setBusy} />
-      </fieldset>}
+      {changeTarget && <dialog ref={changeDialogRef} className="reservation-change-dialog" aria-label="予約日時・担当者の変更"
+        onCancel={event => { event.preventDefault(); if (!busy) setChangeTarget(null); }}>
+        <button type="button" className="dialog-close" disabled={busy} onClick={() => setChangeTarget(null)}>変更画面を閉じる</button>
+        <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
+          <AdminRescheduleForm key={changeTarget.id} auth={auth} reservation={changeTarget}
+            onChanged={reservationChanged} onClose={() => setChangeTarget(null)} onBusy={setBusy} />
+        </fieldset>
+      </dialog>}
       {statusTarget && <section ref={confirmationRef} tabIndex={-1} className="card reservation-confirmation" aria-label="予約状態の更新確認">
         <h2>{statusTarget.status === "cancelled" ? "この予約をキャンセルしますか？" : `「${statuses[statusTarget.status]}」を記録しますか？`}</h2>
         <p>{statusTarget.reservation.customers?.name} 様 ／ {statusTarget.reservation.services?.name}</p>
