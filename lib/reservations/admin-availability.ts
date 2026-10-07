@@ -12,9 +12,12 @@ export async function adminAvailableStarts(storeId: string, serviceId: string, s
   const db = supabaseServer();
   const dayStart = new Date(`${date}T00:00:00+09:00`);
   const dayEnd = new Date(dayStart.getTime() + 86400000);
+  let serviceQuery = db.from("services").select("duration_minutes,buffer_before,buffer_after")
+    .eq("store_id", storeId).eq("id", serviceId);
+  // An already booked, now retired menu can still have its appointment moved.
+  if (!excludeReservationId) serviceQuery = serviceQuery.eq("active", true);
   const [serviceResult, assignment, hoursResult, buffersResult] = await Promise.all([
-    db.from("services").select("duration_minutes,buffer_before,buffer_after")
-      .eq("store_id", storeId).eq("id", serviceId).eq("active", true).maybeSingle(),
+    serviceQuery.maybeSingle(),
     db.from("staff_services").select("staff_id,staff!inner(store_id,active)")
       .eq("service_id", serviceId).eq("staff_id", staffId).eq("staff.store_id", storeId).eq("staff.active", true).maybeSingle(),
     db.from("business_hours").select("start_time,end_time").eq("store_id", storeId)

@@ -25,7 +25,7 @@ describe("admin authorization", () => {
   });
   it.each(["staff", "admin"])("accepts verified %s with a valid store", async role => {
     getUser.mockResolvedValue({ data: { user: { id: "user", app_metadata: { role, store_id: "11111111-1111-1111-1111-111111111111" } } }, error: null });
-    expect(await authorizeStaff("Bearer valid")).toEqual({ storeId: "11111111-1111-1111-1111-111111111111", userId: "user" });
+    expect(await authorizeStaff("Bearer valid")).toEqual({ storeId: "11111111-1111-1111-1111-111111111111", userId: "user", role });
     expect(getUser).toHaveBeenCalledWith("valid");
   });
   it.each([{ role: "customer", store_id: "11111111-1111-1111-1111-111111111111" }, { role: "admin", store_id: "bad-id" }])("rejects invalid roles or stores", async metadata => {

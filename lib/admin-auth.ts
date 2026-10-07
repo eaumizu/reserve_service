@@ -13,5 +13,5 @@ export async function authorizeStaff(authorization: string | null) {
   if (typeof store_id !== "string" ||
       !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(store_id) ||
       !["staff", "admin"].includes(role)) return null;
-  return { storeId: store_id, userId: user.id };
+  return { storeId: store_id, userId: user.id, role: role as "staff" | "admin" };
 }
