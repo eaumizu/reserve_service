@@ -38,6 +38,13 @@ export function AdminReservations() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const loadSequence = useRef(0);
+  const confirmationRef = useRef<HTMLElement>(null);
+  const successRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    const target = statusTarget ? confirmationRef.current : success ? successRef.current : null;
+    if (target) { target.focus({ preventScroll: true }); target.scrollIntoView({ block: "center" }); }
+  }, [statusTarget, success]);
 
   useEffect(() => {
     if (!auth) return;
@@ -126,8 +133,9 @@ export function AdminReservations() {
         if (response.status === 401) await logout();
         throw new Error(result.error ?? "状態を更新できませんでした。一覧を更新してください。");
       }
-      setStatusTarget(null); setRows([]);
-      setSuccess(status === "cancelled" ? "予約をキャンセルしました。" : `「${statuses[status]}」を記録しました。予約履歴は残ります。`);
+      setStatusTarget(null);
+      setRows(current => current.map(row => row.id === reservation.id ? { ...row, ...result.reservation } : row));
+      setSuccess(`${reservation.customers?.name ?? "お客様"} 様の予約を「${statuses[status]}」として保存しました。一覧の状態と操作欄を更新しました。`);
       try { await load(); }
       catch { setError("状態更新は完了しましたが一覧の取得に失敗しました。「予約一覧を更新」を押してください。"); }
     } catch (e) {
@@ -138,7 +146,7 @@ export function AdminReservations() {
   if (!auth) return <section className="card"><p>管理画面の接続設定が不足しています。</p></section>;
   return <section className="card">
     {error && <p className="error" role="alert">{error}</p>}
-    {success && <p role="status">{success}</p>}
+    {success && <p ref={successRef} className="reservation-success" role="status" tabIndex={-1}>{success}</p>}
     {!loggedIn ? <form onSubmit={login}>
       <h2>スタッフログイン</h2>
       <label>メールアドレス<input type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} /></label>
@@ -161,7 +169,7 @@ export function AdminReservations() {
         <AdminRescheduleForm key={changeTarget.id} auth={auth} reservation={changeTarget}
           onChanged={reservationChanged} onClose={() => setChangeTarget(null)} onBusy={setBusy} />
       </fieldset>}
-      {statusTarget && <section className="card" aria-label="予約状態の更新確認">
+      {statusTarget && <section ref={confirmationRef} tabIndex={-1} className="card reservation-confirmation" aria-label="予約状態の更新確認">
         <h2>{statusTarget.status === "cancelled" ? "この予約をキャンセルしますか？" : `「${statuses[statusTarget.status]}」を記録しますか？`}</h2>
         <p>{statusTarget.reservation.customers?.name} 様 ／ {statusTarget.reservation.services?.name}</p>
         <p>{new Date(statusTarget.reservation.start_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}（日本時間） ／ {statusTarget.reservation.staff?.name}</p>
@@ -192,13 +200,16 @@ export function AdminReservations() {
         <tbody>{rows.map(r => <tr key={r.id}>
           <td>{new Date(r.start_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</td>
           <td>{r.customers?.name}</td><td>{r.services?.name}</td><td>{r.staff?.name}</td>
-          <td>{statuses[r.status] ?? r.status}</td><td>{sources[r.source] ?? r.source}</td>
+          <td><span className={`reservation-status reservation-status-${r.status}`}>{statuses[r.status] ?? r.status}</span></td><td>{sources[r.source] ?? r.source}</td>
           <td>{r.status === "confirmed" ? <div className="grid">
             <button disabled={busy} onClick={() => { setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(r); }}>変更</button>
             <button disabled={busy} onClick={() => { setError(""); setSuccess(""); setChangeTarget(null); setStatusTarget({ reservation: r, status: "cancelled" }); }}>キャンセル</button>
             <button disabled={busy || !canRecordOutcome(r, "completed")} title="施術と片付け時間の終了後に操作できます" onClick={() => { setError(""); setSuccess(""); setChangeTarget(null); setStatusTarget({ reservation: r, status: "completed" }); }}>施術完了</button>
             <button disabled={busy || !canRecordOutcome(r, "no_show")} title="予約開始時刻以降に操作できます" onClick={() => { setError(""); setSuccess(""); setChangeTarget(null); setStatusTarget({ reservation: r, status: "no_show" }); }}>無断キャンセル</button>
-          </div> : "—"}</td>
+          </div> : <div className="reservation-record">
+            <strong>{statuses[r.status] ?? r.status}・記録済み</strong>
+            <span>記録日時：{new Date(r.updated_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}（日本時間）</span>
+          </div>}</td>
         </tr>)}</tbody>
       </table></div>
       {!busy && !rows.length && <p>この条件に一致する予約はありません。</p>}
