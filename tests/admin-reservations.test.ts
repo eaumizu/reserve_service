@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 
 const { authorizeStaff, supabaseServer, query, roster, rpc } = vi.hoisted(() => ({
   authorizeStaff: vi.fn(), supabaseServer: vi.fn(), rpc: vi.fn(),
-  query: { select: vi.fn(), eq: vi.fn(), gte: vi.fn(), lt: vi.fn(), order: vi.fn(), range: vi.fn(), update: vi.fn(), maybeSingle: vi.fn() },
+  query: { select: vi.fn(), eq: vi.fn(), gte: vi.fn(), lt: vi.fn(), lte: vi.fn(), order: vi.fn(), range: vi.fn(), update: vi.fn(), maybeSingle: vi.fn() },
   roster: { select: vi.fn(), eq: vi.fn(), order: vi.fn(), then: vi.fn() },
 }));
 vi.mock("../lib/admin-auth", () => ({ authorizeStaff }));
@@ -14,7 +14,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   supabaseServer.mockReturnValue({ from: (table: string) => table === "staff" ? roster : query, rpc });
   query.select.mockReturnValue(query); query.eq.mockReturnValue(query); query.order.mockReturnValue(query);
-  query.gte.mockReturnValue(query); query.lt.mockReturnValue(query);
+  query.gte.mockReturnValue(query); query.lt.mockReturnValue(query); query.lte.mockReturnValue(query);
   query.range.mockResolvedValue({ data: [], error: null });
   roster.select.mockReturnValue(roster); roster.eq.mockReturnValue(roster); roster.order.mockReturnValue(roster);
   roster.then.mockImplementation(resolve => resolve({ data: [], error: null }));
@@ -28,6 +28,13 @@ function patch(body: unknown) {
   }));
 }
 describe("reservation cancellation", () => {
+  it("uses the displayed version for cancellation when supplied", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    query.maybeSingle.mockResolvedValue({ data: { id: reservationId, status: "cancelled" }, error: null });
+    const expectedUpdatedAt = "2030-01-01T00:00:00.123456Z";
+    expect((await patch({ reservationId, status: "cancelled", expectedUpdatedAt })).status).toBe(200);
+    expect(query.eq).toHaveBeenCalledWith("updated_at", expectedUpdatedAt);
+  });
   it("rejects an unauthenticated cancellation without touching the DB", async () => {
     authorizeStaff.mockResolvedValue(null);
     expect((await patch({ reservationId, status: "cancelled" })).status).toBe(401);
@@ -64,6 +71,61 @@ describe("reservation cancellation", () => {
     const response = await patch({ reservationId, status: "cancelled" });
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain("private database detail");
+  });
+});
+
+describe("recording attendance outcomes", () => {
+  const expectedUpdatedAt = "2030-01-01T00:00:00.123456Z";
+  it.each(["completed", "no_show"])("requires authorization for %s", async status => {
+    authorizeStaff.mockResolvedValue(null);
+    expect((await patch({ reservationId, status, expectedUpdatedAt })).status).toBe(401);
+    expect(supabaseServer).not.toHaveBeenCalled();
+  });
+  it.each(["completed", "no_show"])("requires a valid displayed version for %s", async status => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    expect((await patch({ reservationId, status })).status).toBe(400);
+    expect((await patch({ reservationId, status, expectedUpdatedAt: "invalid" })).status).toBe(400);
+    expect(query.update).not.toHaveBeenCalled();
+  });
+  it("records no-show only after the start, atomically checking store, status and version", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    query.maybeSingle.mockResolvedValue({ data: { id: reservationId, status: "no_show" }, error: null });
+    const before = Date.now();
+    expect((await patch({ reservationId, status: "no_show", expectedUpdatedAt, storeId: "other" })).status).toBe(200);
+    expect(query.eq.mock.calls).toEqual([["id", reservationId], ["store_id", storeId], ["status", "confirmed"], ["updated_at", expectedUpdatedAt]]);
+    expect(query.update).toHaveBeenCalledWith({ status: "no_show", updated_at: expect.any(String) });
+    const [column, cutoff] = query.lte.mock.calls[0];
+    expect(column).toBe("start_at"); expect(Date.parse(cutoff)).toBeGreaterThanOrEqual(before); expect(Date.parse(cutoff)).toBeLessThanOrEqual(Date.now());
+  });
+  it("preserves cleanup when recording completion, checking the cutoff in the atomic update", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    query.maybeSingle.mockResolvedValueOnce({ data: { services: { buffer_after: 15 } }, error: null })
+      .mockResolvedValueOnce({ data: { id: reservationId, status: "completed" }, error: null });
+    const before = Date.now();
+    expect((await patch({ reservationId, status: "completed", expectedUpdatedAt })).status).toBe(200);
+    expect(query.select).toHaveBeenCalledWith("services(buffer_after)");
+    expect(query.eq).toHaveBeenCalledWith("store_id", storeId); expect(query.eq).toHaveBeenCalledWith("updated_at", expectedUpdatedAt);
+    const [column, cutoff] = query.lte.mock.calls[0];
+    expect(column).toBe("end_at"); expect(Date.parse(cutoff)).toBeGreaterThanOrEqual(before - 15 * 60000);
+    expect(Date.parse(cutoff)).toBeLessThanOrEqual(Date.now() - 15 * 60000);
+    expect(query.update).toHaveBeenCalledWith({ status: "completed", updated_at: expect.any(String) });
+  });
+  it.each(["completed", "no_show"])("returns a conflict for a future, stale or already recorded %s", async status => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    if (status === "completed") query.maybeSingle.mockResolvedValueOnce({ data: { services: { buffer_after: 15 } }, error: null });
+    query.maybeSingle.mockResolvedValue({ data: null, error: null });
+    const response = await patch({ reservationId, status, expectedUpdatedAt });
+    expect(response.status).toBe(409); expect(await response.json()).not.toHaveProperty("reservation");
+    expect(query.update).toHaveBeenCalledOnce();
+  });
+  it("does not update if completion details were changed or cannot be read", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    query.maybeSingle.mockResolvedValue({ data: null, error: null });
+    expect((await patch({ reservationId, status: "completed", expectedUpdatedAt })).status).toBe(409);
+    query.maybeSingle.mockResolvedValue({ data: null, error: { message: "private DB error" } });
+    const response = await patch({ reservationId, status: "completed", expectedUpdatedAt });
+    expect(response.status).toBe(503); expect(await response.text()).not.toContain("private DB error");
+    expect(query.update).not.toHaveBeenCalled();
   });
 });
 

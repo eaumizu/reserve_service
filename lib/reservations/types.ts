@@ -5,9 +5,9 @@ export type Staff = { id: string; store_id: string; name: string; active: boolea
 export type ReservationInput = { storeId: string; serviceId: string; staffId: string; startAt: string; customerName: string; customerPhone: string; source: ReservationSource; note?: string };
 export type TimeRange = { start: Date; end: Date };
 export type AdminReservation = {
-  id: string; service_id: string; staff_id: string; start_at: string; updated_at: string;
+  id: string; service_id: string; staff_id: string; start_at: string; end_at: string; updated_at: string;
   status: string; source: string;
   customers: { name: string } | null;
-  services: { name: string } | null;
+  services: { name: string; buffer_after?: number } | null;
   staff: { name: string } | null;
 };

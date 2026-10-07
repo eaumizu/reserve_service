@@ -6,9 +6,10 @@ import { AdminBookingForm } from "./AdminBookingForm";
 import { AdminRescheduleForm } from "./AdminRescheduleForm";
 import { AdminStoreSettings } from "./AdminStoreSettings";
 import { AdminAvailabilityBlocks } from "./AdminAvailabilityBlocks";
+import { canRecordOutcome, type ReservationOutcome } from "../lib/reservations/outcome";
 import type { AdminReservation as Reservation } from "../lib/reservations/types";
 
-const statuses: Record<string, string> = { confirmed: "確定", cancelled: "キャンセル", completed: "完了", no_show: "来店なし" };
+const statuses: Record<string, string> = { confirmed: "確定", cancelled: "キャンセル", completed: "施術完了", no_show: "無断キャンセル" };
 const sources: Record<string, string> = { web: "Web", phone: "電話", walk_in: "店頭", admin: "管理" };
 const japanToday = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
 type ListFilters = { date: string; staffId: string };
@@ -27,7 +28,7 @@ export function AdminReservations() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
+  const [statusTarget, setStatusTarget] = useState<{ reservation: Reservation; status: "cancelled" | ReservationOutcome } | null>(null);
   const [changeTarget, setChangeTarget] = useState<Reservation | null>(null);
   const [canManageSettings, setCanManageSettings] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -41,7 +42,7 @@ export function AdminReservations() {
   useEffect(() => {
     if (!auth) return;
     const { data: { subscription } } = auth.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") { loadSequence.current++; setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setCancelTarget(null); setChangeTarget(null); setSuccess(""); setCanManageSettings(false); setShowSettings(false); setShowBlocks(false); }
+      if (event === "SIGNED_OUT") { loadSequence.current++; setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setStatusTarget(null); setChangeTarget(null); setSuccess(""); setCanManageSettings(false); setShowSettings(false); setShowBlocks(false); }
     });
     return () => subscription.unsubscribe();
   }, [auth]);
@@ -78,7 +79,7 @@ export function AdminReservations() {
   async function login(event: FormEvent) {
     event.preventDefault();
     if (!auth) return;
-    setBusy(true); setError(""); setSuccess(""); setCancelTarget(null); setChangeTarget(null); setRows([]);
+    setBusy(true); setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(null); setRows([]);
     try {
       const { error: authError } = await auth.auth.signInWithPassword({ email, password });
       setPassword("");
@@ -89,7 +90,7 @@ export function AdminReservations() {
   }
 
   async function refresh(selected = filters, selectedPage = page) {
-    setBusy(true); setError(""); setSuccess(""); setCancelTarget(null); setChangeTarget(null); setRows([]);
+    setBusy(true); setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(null); setRows([]);
     try { await load(selected, selectedPage); }
     catch (e) { setError(e instanceof Error ? e.message : "予約一覧を取得できませんでした。"); }
     finally { setBusy(false); }
@@ -97,7 +98,7 @@ export function AdminReservations() {
 
   async function logout() {
     loadSequence.current++;
-    setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setError(""); setSuccess(""); setCancelTarget(null); setChangeTarget(null);
+    setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(null);
     setCanManageSettings(false); setShowSettings(false); setShowBlocks(false);
     await auth!.auth.signOut();
   }
@@ -109,25 +110,26 @@ export function AdminReservations() {
     catch { setError("変更は完了しましたが、一覧を取得できません。「更新」を押してください。"); }
   }
 
-  async function cancelReservation() {
-    if (!cancelTarget || busy) return;
+  async function updateReservationStatus() {
+    if (!statusTarget || busy) return;
+    const { reservation, status } = statusTarget;
     setBusy(true); setError(""); setSuccess("");
     try {
       const { data: { session } } = await auth!.auth.getSession();
       if (!session) { await logout(); return; }
       const response = await fetch("/api/admin/reservations", {
         method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ reservationId: cancelTarget.id, status: "cancelled" }),
+        body: JSON.stringify({ reservationId: reservation.id, status, expectedUpdatedAt: reservation.updated_at }),
       });
       const result = await response.json();
       if (!response.ok) {
         if (response.status === 401) await logout();
-        throw new Error(result.error ?? "キャンセルできませんでした。一覧を更新してください。");
+        throw new Error(result.error ?? "状態を更新できませんでした。一覧を更新してください。");
       }
-      setCancelTarget(null); setRows([]);
-      setSuccess("予約をキャンセルしました。この時間は再び予約可能になります。");
+      setStatusTarget(null); setRows([]);
+      setSuccess(status === "cancelled" ? "予約をキャンセルしました。" : `「${statuses[status]}」を記録しました。予約履歴は残ります。`);
       try { await load(); }
-      catch { setError("キャンセルは完了しましたが、一覧の取得に失敗しました。「更新」を押してください。"); }
+      catch { setError("状態更新は完了しましたが一覧の取得に失敗しました。「予約一覧を更新」を押してください。"); }
     } catch (e) {
       setError(e instanceof Error && !(e instanceof TypeError) ? e.message : "通信エラーです。一覧を更新して予約状態を確認してください。");
     } finally { setBusy(false); }
@@ -146,8 +148,8 @@ export function AdminReservations() {
       <div className="grid">
         <button disabled={busy} onClick={async () => { setShowSettings(false); setShowBlocks(false); await refresh(); }}>予約一覧を更新</button>
         {canManageSettings && <>
-          <button className={showSettings ? "selected" : ""} disabled={busy} onClick={() => { setCancelTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowBlocks(false); setShowSettings(!showSettings); }}> {showSettings ? "予約一覧に戻る" : "店舗設定"} </button>
-          <button className={showBlocks ? "selected" : ""} disabled={busy} onClick={() => { setCancelTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowSettings(false); setShowBlocks(!showBlocks); }}> {showBlocks ? "予約一覧に戻る" : "受付停止・臨時休業"} </button>
+          <button className={showSettings ? "selected" : ""} disabled={busy} onClick={() => { setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowBlocks(false); setShowSettings(!showSettings); }}> {showSettings ? "予約一覧に戻る" : "店舗設定"} </button>
+          <button className={showBlocks ? "selected" : ""} disabled={busy} onClick={() => { setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowSettings(false); setShowBlocks(!showBlocks); }}> {showBlocks ? "予約一覧に戻る" : "受付停止・臨時休業"} </button>
         </>}
         <button disabled={busy} onClick={logout}>ログアウト</button>
       </div>
@@ -159,13 +161,16 @@ export function AdminReservations() {
         <AdminRescheduleForm key={changeTarget.id} auth={auth} reservation={changeTarget}
           onChanged={reservationChanged} onClose={() => setChangeTarget(null)} onBusy={setBusy} />
       </fieldset>}
-      {cancelTarget && <section className="card" aria-label="予約キャンセルの確認">
-        <h2>この予約をキャンセルしますか？</h2>
-        <p>{cancelTarget.customers?.name} 様 ／ {cancelTarget.services?.name}</p>
-        <p>{new Date(cancelTarget.start_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}（日本時間） ／ {cancelTarget.staff?.name}</p>
-        <p>予約履歴は残ります。キャンセルすると、この時間は再び予約可能になります。</p>
-        <div className="grid"><button disabled={busy} onClick={() => setCancelTarget(null)}>戻る</button>
-          <button disabled={busy} onClick={cancelReservation}>{busy ? "処理中…" : "キャンセルを確定する"}</button></div>
+      {statusTarget && <section className="card" aria-label="予約状態の更新確認">
+        <h2>{statusTarget.status === "cancelled" ? "この予約をキャンセルしますか？" : `「${statuses[statusTarget.status]}」を記録しますか？`}</h2>
+        <p>{statusTarget.reservation.customers?.name} 様 ／ {statusTarget.reservation.services?.name}</p>
+        <p>{new Date(statusTarget.reservation.start_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}（日本時間） ／ {statusTarget.reservation.staff?.name}</p>
+        <p>予約履歴は残ります。</p>
+        {statusTarget.status === "completed" && <p>施術と片付け時間の終了後に記録できます。</p>}
+        {statusTarget.status === "no_show" && <p>予約開始時刻を過ぎても来店がなかった場合に記録します。この予約による空き枠の占有が解除されます。</p>}
+        {statusTarget.status === "cancelled" && <p>この予約による空き枠の占有が解除されます。</p>}
+        <div className="grid"><button disabled={busy} onClick={() => setStatusTarget(null)}>戻る</button>
+          <button disabled={busy} onClick={updateReservationStatus}>{busy ? "処理中…" : `${statuses[statusTarget.status]}を確定する`}</button></div>
       </section>}
       <section className="card" aria-label="予約一覧の絞り込み">
         <h2>予約一覧</h2>
@@ -181,6 +186,7 @@ export function AdminReservations() {
         <p className="muted">{filters.date || "全期間"} ／ {filters.staffId ? listStaff.find(person => person.id === filters.staffId)?.name ?? "選択したスタッフ" : "全スタッフ"}。開始時刻の早い順で表示します。</p>
       </section>
       <p className="muted">日時はすべて日本時間です。1ページ100件まで表示します。キャンセル済みの予約も含みます。</p>
+      <p className="muted">施術完了は片付け時間終了後、無断キャンセルは予約開始時刻以降に記録できます。時刻を過ぎたら「予約一覧を更新」を押してください。</p>
       <div style={{ overflowX: "auto" }}><table className="admin-table">
         <thead><tr><th>日時</th><th>お客様</th><th>メニュー</th><th>担当</th><th>状態</th><th>経路</th><th>操作</th></tr></thead>
         <tbody>{rows.map(r => <tr key={r.id}>
@@ -188,8 +194,10 @@ export function AdminReservations() {
           <td>{r.customers?.name}</td><td>{r.services?.name}</td><td>{r.staff?.name}</td>
           <td>{statuses[r.status] ?? r.status}</td><td>{sources[r.source] ?? r.source}</td>
           <td>{r.status === "confirmed" ? <div className="grid">
-            <button disabled={busy} onClick={() => { setError(""); setSuccess(""); setCancelTarget(null); setChangeTarget(r); }}>変更</button>
-            <button disabled={busy} onClick={() => { setError(""); setSuccess(""); setChangeTarget(null); setCancelTarget(r); }}>キャンセル</button>
+            <button disabled={busy} onClick={() => { setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(r); }}>変更</button>
+            <button disabled={busy} onClick={() => { setError(""); setSuccess(""); setChangeTarget(null); setStatusTarget({ reservation: r, status: "cancelled" }); }}>キャンセル</button>
+            <button disabled={busy || !canRecordOutcome(r, "completed")} title="施術と片付け時間の終了後に操作できます" onClick={() => { setError(""); setSuccess(""); setChangeTarget(null); setStatusTarget({ reservation: r, status: "completed" }); }}>施術完了</button>
+            <button disabled={busy || !canRecordOutcome(r, "no_show")} title="予約開始時刻以降に操作できます" onClick={() => { setError(""); setSuccess(""); setChangeTarget(null); setStatusTarget({ reservation: r, status: "no_show" }); }}>無断キャンセル</button>
           </div> : "—"}</td>
         </tr>)}</tbody>
       </table></div>
