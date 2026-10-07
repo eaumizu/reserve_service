@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const { authorizeStaff, supabaseServer, query, rpc } = vi.hoisted(() => ({
+const { authorizeStaff, supabaseServer, query, roster, rpc } = vi.hoisted(() => ({
   authorizeStaff: vi.fn(), supabaseServer: vi.fn(), rpc: vi.fn(),
-  query: { select: vi.fn(), eq: vi.fn(), order: vi.fn(), limit: vi.fn(), update: vi.fn(), maybeSingle: vi.fn() },
+  query: { select: vi.fn(), eq: vi.fn(), gte: vi.fn(), lt: vi.fn(), order: vi.fn(), range: vi.fn(), update: vi.fn(), maybeSingle: vi.fn() },
+  roster: { select: vi.fn(), eq: vi.fn(), order: vi.fn(), then: vi.fn() },
 }));
 vi.mock("../lib/admin-auth", () => ({ authorizeStaff }));
 vi.mock("../lib/supabase-server", () => ({ supabaseServer }));
@@ -11,8 +12,12 @@ import { GET, POST, PATCH } from "../app/api/admin/reservations/route";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  supabaseServer.mockReturnValue({ from: () => query, rpc });
+  supabaseServer.mockReturnValue({ from: (table: string) => table === "staff" ? roster : query, rpc });
   query.select.mockReturnValue(query); query.eq.mockReturnValue(query); query.order.mockReturnValue(query);
+  query.gte.mockReturnValue(query); query.lt.mockReturnValue(query);
+  query.range.mockResolvedValue({ data: [], error: null });
+  roster.select.mockReturnValue(roster); roster.eq.mockReturnValue(roster); roster.order.mockReturnValue(roster);
+  roster.then.mockImplementation(resolve => resolve({ data: [], error: null }));
   query.update.mockReturnValue(query);
 });
 
@@ -123,17 +128,52 @@ describe("admin reservations API", () => {
   });
   it("uses the verified staff store, ignoring the requested store", async () => {
     authorizeStaff.mockResolvedValue({ storeId: "trusted-store" });
-    query.limit.mockResolvedValue({ data: [], error: null });
+    query.range.mockResolvedValue({ data: [], error: null });
     const response = await GET(new NextRequest("http://localhost/api/admin/reservations?storeId=other-store", { headers: { authorization: "Bearer token" } }));
     expect(response.status).toBe(200);
     expect(query.eq).toHaveBeenCalledWith("store_id", "trusted-store");
-    expect(await response.json()).toEqual({ reservations: [], canManageSettings: false });
+    expect(await response.json()).toEqual({ reservations: [], staff: [], hasMore: false, canManageSettings: false });
   });
   it("does not expose database errors or partial records", async () => {
     authorizeStaff.mockResolvedValue({ storeId: "trusted-store" });
-    query.limit.mockResolvedValue({ data: [{ id: "secret" }], error: { message: "private database error" } });
+    query.range.mockResolvedValue({ data: [{ id: "secret" }], error: { message: "private database error" } });
     const response = await GET(new NextRequest("http://localhost/api/admin/reservations"));
     expect(response.status).toBe(503);
     expect(await response.text()).not.toMatch(/secret|private database error/);
+  });
+  it("filters by Japan-time date and staff before paging in stable start order", async () => {
+    authorizeStaff.mockResolvedValue({ storeId, role: "admin" });
+    const staffId = "22222222-2222-2222-2222-222222222222";
+    query.range.mockResolvedValue({ data: Array.from({ length: 101 }, (_, id) => ({ id })), error: null });
+    roster.then.mockImplementation(resolve => resolve({ data: [{ id: staffId, name: "担当", active: false }], error: null }));
+    const response = await GET(new NextRequest(`http://localhost/api/admin/reservations?date=2030-01-01&staffId=${staffId}&page=1`));
+    expect(response.status).toBe(200);
+    expect(query.gte).toHaveBeenCalledWith("start_at", "2029-12-31T15:00:00.000Z");
+    expect(query.lt).toHaveBeenCalledWith("start_at", "2030-01-01T15:00:00.000Z");
+    expect(query.eq).toHaveBeenCalledWith("staff_id", staffId);
+    expect(query.order.mock.calls).toEqual([["start_at", { ascending: true }], ["id", { ascending: true }]]);
+    expect(query.range).toHaveBeenCalledWith(100, 200);
+    expect(roster.eq.mock.calls).toEqual([["store_id", storeId]]);
+    const result = await response.json();
+    expect(result.reservations).toHaveLength(100); expect(result.hasMore).toBe(true);
+    expect(result.canManageSettings).toBe(true); expect(result.staff[0].active).toBe(false);
+  });
+  it("has no next page for exactly 100 matching records", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    query.range.mockResolvedValue({ data: Array.from({ length: 100 }, (_, id) => ({ id })), error: null });
+    const response = await GET(new NextRequest("http://localhost/api/admin/reservations"));
+    expect((await response.json()).hasMore).toBe(false);
+    expect(query.gte).not.toHaveBeenCalled(); expect(query.lt).not.toHaveBeenCalled();
+  });
+  it.each(["date=2030-02-30", "date=", "staffId=bad", "page=-1", "page=1.5", "page=10001"])("rejects invalid filters %s before DB reads", async params => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    expect((await GET(new NextRequest(`http://localhost/api/admin/reservations?${params}`))).status).toBe(400);
+    expect(supabaseServer).not.toHaveBeenCalled();
+  });
+  it("fails closed when the staff roster cannot be fetched", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    roster.then.mockImplementation(resolve => resolve({ data: null, error: { message: "private roster detail" } }));
+    const response = await GET(new NextRequest("http://localhost/api/admin/reservations"));
+    expect(response.status).toBe(503); expect(await response.text()).not.toContain("private roster detail");
   });
 });
