@@ -10,12 +10,13 @@ let hours: { start_time: string; end_time: string }[];
 let settingsError: boolean;
 let conflictsError: boolean;
 let assigned: boolean;
+let bufferBefore: number;
 const queries: { table: string; fields: string; eq: ReturnType<typeof vi.fn>; lt: ReturnType<typeof vi.fn>; gt: ReturnType<typeof vi.fn> }[] = [];
 const store = "verified-store", service = "service", staff = "staff";
 const jst = (time: string) => `2030-01-01T${time}:00+09:00`;
 beforeEach(() => {
   reservations = []; blocks = []; hours = [{ start_time: "09:00:00", end_time: "11:00:00" }];
-  settingsError = false; conflictsError = false; assigned = true; queries.length = 0;
+  settingsError = false; conflictsError = false; assigned = true; bufferBefore = 0; queries.length = 0;
   from.mockReset();
   from.mockImplementation(table => {
     const q = { table, fields: "", select: vi.fn(), eq: vi.fn(), neq: vi.fn(), lt: vi.fn(), gt: vi.fn(), maybeSingle: vi.fn(), then: vi.fn() };
@@ -23,7 +24,7 @@ beforeEach(() => {
     q.eq.mockReturnValue(q); q.neq.mockReturnValue(q); q.lt.mockReturnValue(q); q.gt.mockReturnValue(q);
     function result() {
       const error = (settingsError && table === "business_hours") || (conflictsError && table === "reservations") ? { message: "DB unavailable" } : null;
-      const data = table === "services" ? q.fields.includes("duration_minutes") ? { duration_minutes: 30, buffer_before: 0, buffer_after: 10 } : [{ buffer_before: 0, buffer_after: 10 }]
+      const data = table === "services" ? q.fields.includes("duration_minutes") ? { duration_minutes: 30, buffer_before: bufferBefore, buffer_after: 10 } : [{ buffer_before: bufferBefore, buffer_after: 10 }]
         : table === "staff_services" ? assigned ? { staff_id: staff } : null
         : table === "business_hours" ? hours : table === "reservations" ? reservations : blocks;
       return { data, error };
@@ -67,6 +68,24 @@ describe("Japan-time admin availability", () => {
   it("returns no slots on a closed day", async () => {
     hours = [];
     expect(await adminAvailableStarts(store, service, staff, "2030-01-01")).toEqual([]);
+  });
+  it("honors overnight store closures and overlapping staff closures", async () => {
+    hours = [{ start_time: "00:00:00", end_time: "02:00:00" }];
+    blocks = [{ staff_id: null, start_at: "2029-12-31T23:30:00+09:00", end_at: jst("01:00") },
+      { staff_id: staff, start_at: jst("01:00"), end_at: jst("01:30") }];
+    expect(await adminAvailableStarts(store, service, staff, "2030-01-01")).toEqual([]);
+    blocks = [];
+    expect(await adminAvailableStarts(store, service, staff, "2030-01-01"))
+      .toEqual(["2029-12-31T15:00:00.000Z", "2029-12-31T15:30:00.000Z", "2029-12-31T16:00:00.000Z"]);
+  });
+  it("includes yesterday's closure when treatment preparation crosses midnight", async () => {
+    bufferBefore = 30;
+    hours = [{ start_time: "00:00:00", end_time: "02:00:00" }];
+    blocks = [{ staff_id: null, start_at: "2029-12-31T23:30:00+09:00", end_at: jst("00:00") }];
+    expect(await adminAvailableStarts(store, service, staff, "2030-01-01"))
+      .toEqual(["2029-12-31T15:30:00.000Z", "2029-12-31T16:00:00.000Z"]);
+    expect(queries.find(q => q.table === "availability_blocks")!.gt)
+      .toHaveBeenCalledWith("end_at", "2029-12-31T14:30:00.000Z");
   });
   it("rejects staff without a matching active assignment", async () => {
     assigned = false;
