@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     if (!filters) return NextResponse.json({ error: "日付・スタッフ・表示ページを確認してください。" }, { status: 400, headers });
     const db = supabaseServer();
     let query = db.from("reservations")
-      .select("id,service_id,staff_id,start_at,end_at,updated_at,status,source,customers(name),services(name),staff(name)")
+      .select("id,service_id,staff_id,start_at,end_at,updated_at,status,source,customers(name),services(name,buffer_after),staff(name)")
       .eq("store_id", staff.storeId);
     if (filters.start && filters.end) query = query.gte("start_at", filters.start).lt("start_at", filters.end);
     if (filters.staffId) query = query.eq("staff_id", filters.staffId);
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** Cancel only a confirmed reservation in the verified staff member's store. */
+/** Update only a confirmed reservation in the verified staff member's store. */
 export async function PATCH(request: NextRequest) {
   const headers = { "Cache-Control": "private, no-store" };
   try {
@@ -43,19 +43,38 @@ export async function PATCH(request: NextRequest) {
     catch { return NextResponse.json({ error: "入力内容を確認してください。" }, { status: 400, headers }); }
     if (!body || typeof body.reservationId !== "string" ||
         !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(body.reservationId) ||
-        body.status !== "cancelled") {
+        !["cancelled", "completed", "no_show"].includes(body.status)) {
       return NextResponse.json({ error: "入力内容を確認してください。" }, { status: 400, headers });
     }
+    const hasVersion = body.expectedUpdatedAt !== undefined;
+    if ((body.status !== "cancelled" || hasVersion) &&
+      (typeof body.expectedUpdatedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/.test(body.expectedUpdatedAt) || !Number.isFinite(Date.parse(body.expectedUpdatedAt))))
+      return NextResponse.json({ error: "予約一覧を更新して、対象を選び直してください。" }, { status: 400, headers });
+    const db = supabaseServer();
+    let cleanupMinutes = 0;
+    if (body.status === "completed") {
+      // Preserve the reserved cleanup time before releasing a completed booking.
+      const details = await db.from("reservations").select("services(buffer_after)")
+        .eq("id", body.reservationId).eq("store_id", staff.storeId).eq("updated_at", body.expectedUpdatedAt).maybeSingle();
+      if (details.error) throw details.error;
+      if (!details.data) return NextResponse.json({ error: "予約が更新されています。一覧を更新してください。" }, { status: 409, headers });
+      const service = Array.isArray(details.data.services) ? details.data.services[0] : details.data.services;
+      if (!service || !Number.isInteger(service.buffer_after) || service.buffer_after < 0) throw new Error("Reservation service missing");
+      cleanupMinutes = service.buffer_after;
+    }
+    const now = new Date();
     // All filters are part of one atomic UPDATE: concurrent status changes cannot be overwritten.
-    const { data, error } = await supabaseServer().from("reservations")
-      .update({ status: "cancelled", updated_at: new Date().toISOString() })
-      .eq("id", body.reservationId).eq("store_id", staff.storeId).eq("status", "confirmed")
-      .select("id,status,updated_at").maybeSingle();
+    let query = db.from("reservations").update({ status: body.status, updated_at: now.toISOString() })
+      .eq("id", body.reservationId).eq("store_id", staff.storeId).eq("status", "confirmed");
+    if (hasVersion) query = query.eq("updated_at", body.expectedUpdatedAt);
+    if (body.status === "completed") query = query.lte("end_at", new Date(now.getTime() - cleanupMinutes * 60000).toISOString());
+    if (body.status === "no_show") query = query.lte("start_at", now.toISOString());
+    const { data, error } = await query.select("id,status,updated_at").maybeSingle();
     if (error) throw error;
-    if (!data) return NextResponse.json({ error: "予約が見つからないか、すでに状態が変更されています。一覧を更新してください。" }, { status: 409, headers });
+    if (!data) return NextResponse.json({ error: "予約が更新されたか、操作できる時刻になっていません。施術完了は片付け時間終了後、無断キャンセルは開始時刻以降に記録できます。一覧を更新してください。" }, { status: 409, headers });
     return NextResponse.json({ reservation: data }, { headers });
   } catch {
-    return NextResponse.json({ error: "キャンセルを完了できませんでした。一覧を更新して予約状態を確認してください。" }, { status: 503, headers });
+    return NextResponse.json({ error: "予約状態の更新結果を確認できませんでした。一覧を更新して確認してください。" }, { status: 503, headers });
   }
 }
 
