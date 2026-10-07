@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       .eq("store_id", staff.storeId)
       .order("start_at", { ascending: false }).limit(100);
     if (error) throw error;
-    return NextResponse.json({ reservations: data ?? [] }, { headers });
+    return NextResponse.json({ reservations: data ?? [], canManageSettings: staff.role === "admin" }, { headers });
   } catch {
     return NextResponse.json({ error: "予約一覧を取得できませんでした。" }, { status: 503, headers });
   }

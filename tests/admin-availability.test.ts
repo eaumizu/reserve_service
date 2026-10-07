@@ -84,4 +84,11 @@ describe("Japan-time admin availability", () => {
     settingsError = false; conflictsError = true;
     await expect(adminAvailableStarts(store, service, staff, "2030-01-01")).rejects.toThrow();
   });
+  it("permits retired menus only for a verified existing appointment", async () => {
+    await adminAvailableStarts(store, service, staff, "2030-01-01");
+    expect(queries.find(q => q.fields.includes("duration_minutes"))!.eq).toHaveBeenCalledWith("active", true);
+    queries.length = 0;
+    await adminAvailableStarts(store, service, staff, "2030-01-01", "current-reservation");
+    expect(queries.find(q => q.fields.includes("duration_minutes"))!.eq).not.toHaveBeenCalledWith("active", true);
+  });
 });

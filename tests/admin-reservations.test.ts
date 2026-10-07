@@ -120,7 +120,7 @@ describe("admin reservations API", () => {
     const response = await GET(new NextRequest("http://localhost/api/admin/reservations?storeId=other-store", { headers: { authorization: "Bearer token" } }));
     expect(response.status).toBe(200);
     expect(query.eq).toHaveBeenCalledWith("store_id", "trusted-store");
-    expect(await response.json()).toEqual({ reservations: [] });
+    expect(await response.json()).toEqual({ reservations: [], canManageSettings: false });
   });
   it("does not expose database errors or partial records", async () => {
     authorizeStaff.mockResolvedValue({ storeId: "trusted-store" });

@@ -5,7 +5,7 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 ## 起動
 
 1. `.env.example` を `.env.local` にコピーし、Supabase Project URL、anon key、**server 専用** service-role key を設定する。
-2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、`supabase/migrations/0002_validate_reservation_schedule.sql`、`supabase/migrations/0003_grant_service_role_table_access.sql`、`supabase/migrations/0004_reschedule_reservation_atomic.sql`、続いて `supabase/seed.sql` を順に実行する。
+2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、`supabase/migrations/0002_validate_reservation_schedule.sql`、`supabase/migrations/0003_grant_service_role_table_access.sql`、`supabase/migrations/0004_reschedule_reservation_atomic.sql`、`supabase/migrations/0005_store_settings_atomic.sql`、続いて `supabase/seed.sql` を順に実行する。
 3. `npm install`、`npm run dev` を実行して `http://localhost:3000` を開く。
 
 `/` はお客様用の予約フロー、`/admin` はメールアドレス・パスワードでログインするスタッフ向け予約一覧です。予約データはHTMLへ埋め込まず、認証済みユーザーの `app_metadata.store_id` と `role: staff | admin` をサーバーで検証した後に、その店舗の最新100件だけを取得します。ログイン情報はメモリ内だけに保持するため、ページ再読み込み時は再ログインします。
@@ -19,6 +19,12 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 確定済み予約の「変更」から日時・担当者を変更できます。空き枠取得時は、所属店舗内の対象予約を検証したうえで、その予約だけを競合対象から除外します。お客様・メニュー・受付経路・予約IDは変えません。更新には表示時点の `updated_at` が必須で、別操作により状態が変わっていた場合は409を返します。
 
 変更機能には **`0004_reschedule_reservation_atomic.sql` の追加適用が必要** です。既存の0001〜0003やseedは再実行しないでください。DB関数は新旧スタッフの予約作成と同じadvisory lockを取得してから元の予約行をロックし、待機中の変更と営業時間・バッファー込みの競合を再検証した後、一つのトランザクションで更新します。エラー時は元の予約を維持します。関数が未適用の場合、APIは503を返し、予約をキャンセルして作り直す等の代替処理は行いません。
+
+## 店舗設定
+
+`/admin` の管理者（`role: admin`）には「店舗設定」が表示されます。店舗名、メニューの料金・施術時間・前後バッファー・公開状態、施術者名と対応メニュー、曜日別営業時間を編集できます。営業時間は日本時間の30分刻みで、昼休みなど複数の時間帯にも対応します。設定は項目ごとに保存し、実情報が未確定の間はデモ情報で検証できます。店舗名の変更は公開予約ページにも反映されます。施術者の追加はログイン用アカウントの作成とは別です。
+
+既存環境では **`0005_store_settings_atomic.sql` だけを新しいSQLタブで実行** してください。過去のマイグレーションとseedは再実行しません。設定APIは認証ユーザーの所属店舗と管理者権限を確認し、DB関数がスタッフの予約用ロックを取ったうえで更新します。予約履歴のあるメニューの施術時間・バッファーは変更できません（新メニューを追加してください）。既存の未終了・確定済み予約が営業時間外になる変更も拒否します。停止したメニュー・施術者の予約履歴は残り、既存予約の日時変更は停止済みメニューでも可能です。オンライン受付を停止したメニューは古い予約フォームからの確定もDBで拒否します。
 
 ## 初期管理者の登録
 
