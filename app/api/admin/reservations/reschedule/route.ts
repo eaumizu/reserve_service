@@ -1,3 +1,4 @@
+import { TIME_STEP_MS } from "../../../../../lib/reservations/time-grid";
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeStaff } from "../../../../../lib/admin-auth";
 import { supabaseServer } from "../../../../../lib/supabase-server";
@@ -14,9 +15,9 @@ export async function POST(request: NextRequest) {
     const timestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
     if (!body || typeof body.reservationId !== "string" || !uuid.test(body.reservationId) ||
         typeof body.staffId !== "string" || !uuid.test(body.staffId) ||
-        typeof body.startAt !== "string" || !timestamp.test(body.startAt) || !Number.isFinite(Date.parse(body.startAt)) || Date.parse(body.startAt) % 1800000 !== 0 ||
+        typeof body.startAt !== "string" || !timestamp.test(body.startAt) || !Number.isFinite(Date.parse(body.startAt)) || Date.parse(body.startAt) % TIME_STEP_MS !== 0 ||
         typeof body.expectedUpdatedAt !== "string" || !timestamp.test(body.expectedUpdatedAt) || !Number.isFinite(Date.parse(body.expectedUpdatedAt))) {
-      return NextResponse.json({ error: "担当者と30分刻みの空き時間を選択してください。" }, { status: 400, headers });
+      return NextResponse.json({ error: "担当者と15分刻みの空き時間を選択してください。" }, { status: 400, headers });
     }
     const { data, error } = await supabaseServer().rpc("reschedule_reservation_atomic", {
       p_store_id: staff.storeId, p_reservation_id: body.reservationId, p_staff_id: body.staffId,

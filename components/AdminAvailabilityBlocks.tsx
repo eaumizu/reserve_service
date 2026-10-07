@@ -1,10 +1,12 @@
 "use client";
 
+import { CLOCK_TIMES } from "../lib/reservations/time-grid";
+
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseAvailabilityBlock, type AvailabilityBlock, type BlockStaff } from "../lib/availability-blocks";
 
-const times = Array.from({ length: 48 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 ? "30" : "00"}`);
+const times = CLOCK_TIMES;
 const japanToday = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
 const format = (value: string) => new Date(value).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 type Draft = { staffId: string | null; startDate: string; endDate: string; startTime: string; endTime: string; reason: string };

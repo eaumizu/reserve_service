@@ -70,6 +70,13 @@ function post(body: unknown) {
   }));
 }
 describe("manual booking API", () => {
+  it.each(["15", "45"])("accepts a start at minute %s", async minute => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    rpc.mockResolvedValue({ data: { id: "reservation" }, error: null });
+    const startAt = `2030-01-01T10:${minute}:00+09:00`;
+    expect((await post({ ...input, startAt })).status).toBe(201);
+    expect(rpc).toHaveBeenCalledWith("create_reservation_atomic", expect.objectContaining({ p_start_at: startAt }));
+  });
   it("rejects unauthenticated booking without writing", async () => {
     authorizeStaff.mockResolvedValue(null);
     expect((await post(input)).status).toBe(401);
@@ -93,7 +100,7 @@ describe("manual booking API", () => {
       p_store_id: storeId, p_source: source, p_start_at: "2030-01-01T10:00:00+09:00", p_customer_name: "確認用", p_customer_phone: "09000000000",
     }));
   });
-  it.each(["2030-01-01T10:05:00+09:00", "2030-01-01T10:00:01+09:00"])("rejects minute/second offsets outside 30-minute starts", async startAt => {
+  it.each(["2030-01-01T10:05:00+09:00", "2030-01-01T10:00:01+09:00"])("rejects minute/second offsets outside 15-minute starts", async startAt => {
     authorizeStaff.mockResolvedValue({ storeId });
     expect((await post({ ...input, startAt })).status).toBe(400);
     expect(rpc).not.toHaveBeenCalled();

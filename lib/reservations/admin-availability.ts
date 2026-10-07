@@ -1,3 +1,4 @@
+import { TIME_STEP_MS, TIME_STEP_MINUTES } from "./time-grid";
 import { supabaseServer } from "../supabase-server";
 import { addMinutes, findAvailableStarts } from "./availability";
 
@@ -48,10 +49,10 @@ export async function adminAvailableStarts(storeId: string, serviceId: string, s
       .map(row => ({ start: new Date(row.start_at), end: new Date(row.end_at) })),
   ];
   const open = (hoursResult.data ?? []).map(hours => ({
-    start: new Date(Math.ceil(new Date(`${date}T${hours.start_time}+09:00`).getTime() / 1800000) * 1800000),
+    start: new Date(Math.ceil(new Date(`${date}T${hours.start_time}+09:00`).getTime() / TIME_STEP_MS) * TIME_STEP_MS),
     end: new Date(`${date}T${hours.end_time}+09:00`),
   }));
   return [...new Set(findAvailableStarts({ open, occupied, durationMinutes: service.duration_minutes,
-    bufferBefore: service.buffer_before, bufferAfter: service.buffer_after, intervalMinutes: 30 })
+    bufferBefore: service.buffer_before, bufferAfter: service.buffer_after, intervalMinutes: TIME_STEP_MINUTES })
     .map(start => start.toISOString()))].sort();
 }

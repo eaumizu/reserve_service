@@ -44,7 +44,7 @@ async function mutate(request: NextRequest, action: "create" | "delete") {
     let body;
     try { body = await request.json(); } catch { return response("入力内容を確認してください。", 400); }
     const data = action === "create" ? parseAvailabilityBlock(body) : null;
-    if (action === "create" && !data || action === "delete" && !isBlockId(body?.blockId)) return response("日時・担当者・入力内容を確認してください。時間は30分刻みで選択してください。", 400);
+    if (action === "create" && !data || action === "delete" && !isBlockId(body?.blockId)) return response("日時・担当者・入力内容を確認してください。時間は15分刻みで選択してください。", 400);
     const { data: saved, error } = await supabaseServer().rpc("manage_availability_block_atomic", {
       p_store_id: user.storeId, p_action: action, p_block_id: action === "delete" ? body.blockId : null,
       p_staff_id: data?.staffId ?? null, p_start_at: data?.startAt ?? null,

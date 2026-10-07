@@ -40,22 +40,22 @@ describe("Japan-time admin availability", () => {
     expect(isBookingDate(date)).toBe(false);
   });
   it("accepts a valid leap date", () => expect(isBookingDate("2028-02-29")).toBe(true));
-  it("returns 30-minute Japan-time starts that fit the treatment and cleanup", async () => {
+  it("returns 15-minute Japan-time starts that fit the treatment and cleanup", async () => {
     expect(await adminAvailableStarts(store, service, staff, "2030-01-01"))
-      .toEqual(["2030-01-01T00:00:00.000Z", "2030-01-01T00:30:00.000Z", "2030-01-01T01:00:00.000Z"]);
+      .toEqual(["2030-01-01T00:00:00.000Z", "2030-01-01T00:15:00.000Z", "2030-01-01T00:30:00.000Z", "2030-01-01T00:45:00.000Z", "2030-01-01T01:00:00.000Z", "2030-01-01T01:15:00.000Z"]);
     const hoursQuery = queries.find(q => q.table === "business_hours")!;
     expect(hoursQuery.eq).toHaveBeenCalledWith("weekday", 2);
     expect(queries.filter(q => q.table === "services").some(q => q.eq.mock.calls.some(call => call[0] === "online_bookable"))).toBe(false);
   });
-  it("aligns starts to :00 and :30 even when opening is at 09:15", async () => {
-    hours = [{ start_time: "09:15:00", end_time: "11:00:00" }];
+  it("aligns starts to quarter-hours when opening is at 09:10", async () => {
+    hours = [{ start_time: "09:10:00", end_time: "11:00:00" }];
     expect(await adminAvailableStarts(store, service, staff, "2030-01-01"))
-      .toEqual(["2030-01-01T00:30:00.000Z", "2030-01-01T01:00:00.000Z"]);
+      .toEqual(["2030-01-01T00:15:00.000Z", "2030-01-01T00:30:00.000Z", "2030-01-01T00:45:00.000Z", "2030-01-01T01:00:00.000Z", "2030-01-01T01:15:00.000Z"]);
   });
   it("excludes existing reservations and their buffers", async () => {
     reservations = [{ start_at: jst("09:00"), end_at: jst("09:30"), services: { buffer_before: 0, buffer_after: 10 } }];
     expect(await adminAvailableStarts(store, service, staff, "2030-01-01"))
-      .toEqual(["2030-01-01T01:00:00.000Z"]);
+      .toEqual(["2030-01-01T00:45:00.000Z", "2030-01-01T01:00:00.000Z", "2030-01-01T01:15:00.000Z"]);
     const query = queries.find(q => q.table === "reservations")!;
     expect(query.eq.mock.calls).toEqual([["store_id", store], ["staff_id", staff], ["status", "confirmed"]]);
     expect(query.gt).toHaveBeenCalledWith("end_at", "2029-12-31T14:50:00.000Z");
@@ -63,7 +63,7 @@ describe("Japan-time admin availability", () => {
   it("honors store-wide blocks but ignores blocks for another staff member", async () => {
     blocks = [{ staff_id: null, start_at: jst("09:00"), end_at: jst("10:00") }, { staff_id: "other", start_at: jst("10:00"), end_at: jst("11:00") }];
     expect(await adminAvailableStarts(store, service, staff, "2030-01-01"))
-      .toEqual(["2030-01-01T01:00:00.000Z"]);
+      .toEqual(["2030-01-01T01:00:00.000Z", "2030-01-01T01:15:00.000Z"]);
   });
   it("returns no slots on a closed day", async () => {
     hours = [];
@@ -76,14 +76,14 @@ describe("Japan-time admin availability", () => {
     expect(await adminAvailableStarts(store, service, staff, "2030-01-01")).toEqual([]);
     blocks = [];
     expect(await adminAvailableStarts(store, service, staff, "2030-01-01"))
-      .toEqual(["2029-12-31T15:00:00.000Z", "2029-12-31T15:30:00.000Z", "2029-12-31T16:00:00.000Z"]);
+      .toEqual(["2029-12-31T15:00:00.000Z", "2029-12-31T15:15:00.000Z", "2029-12-31T15:30:00.000Z", "2029-12-31T15:45:00.000Z", "2029-12-31T16:00:00.000Z", "2029-12-31T16:15:00.000Z"]);
   });
   it("includes yesterday's closure when treatment preparation crosses midnight", async () => {
     bufferBefore = 30;
     hours = [{ start_time: "00:00:00", end_time: "02:00:00" }];
     blocks = [{ staff_id: null, start_at: "2029-12-31T23:30:00+09:00", end_at: jst("00:00") }];
     expect(await adminAvailableStarts(store, service, staff, "2030-01-01"))
-      .toEqual(["2029-12-31T15:30:00.000Z", "2029-12-31T16:00:00.000Z"]);
+      .toEqual(["2029-12-31T15:30:00.000Z", "2029-12-31T15:45:00.000Z", "2029-12-31T16:00:00.000Z", "2029-12-31T16:15:00.000Z"]);
     expect(queries.find(q => q.table === "availability_blocks")!.gt)
       .toHaveBeenCalledWith("end_at", "2029-12-31T14:30:00.000Z");
   });

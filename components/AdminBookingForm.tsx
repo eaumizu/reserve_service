@@ -137,7 +137,7 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
         <option value="">{slotsLoading ? "空き時間を確認中…" : "空き時間を選んでください"}</option>
         {slots.map(slot => <option key={slot} value={slot}>{new Date(slot).toLocaleTimeString("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" })}</option>)}
       </select></label>
-      <p className="muted">30分刻みの空き枠から選択してください。施術時間と前後の準備時間を含めて、予約可能な時間だけ表示します。</p>
+      <p className="muted">15分刻みの空き枠から選択してください。施術時間と前後の準備時間を含めて、予約可能な時間だけ表示します。</p>
       {slotsError && <p className="error" role="alert">{slotsError}</p>}
       {serviceId && staffId && date && !slotsLoading && !slotsError && !slots.length && <p role="status">この日に予約できる時間はありません。</p>}
       <button type="button" disabled={busy || slotsLoading || !serviceId || !staffId || !date} onClick={() => { clearSlot(); setSlotsVersion(version => version + 1); }}>空き時間を更新</button>
