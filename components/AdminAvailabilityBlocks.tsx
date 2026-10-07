@@ -1,6 +1,7 @@
 "use client";
 
 import { CLOCK_TIMES } from "../lib/reservations/time-grid";
+import { adjustBlockEnd, blockEndTimes, minimumBlockEndDate } from "../lib/block-form-times";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -24,6 +25,13 @@ export function AdminAvailabilityBlocks({ auth, onBusy }: { auth: SupabaseClient
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const inFlight = useRef(false);
+
+  function changePeriod(changes: Partial<Draft>) {
+    setReview(null);
+    setDraft(previous => adjustBlockEnd({ ...previous, ...changes }, allDay));
+  }
+  const endTimes = blockEndTimes(draft);
+  const minEndDate = minimumBlockEndDate(draft.startDate, draft.startTime, allDay);
 
   async function request(path: string, init?: RequestInit) {
     const { data: { session } } = await auth.auth.getSession();
@@ -111,15 +119,19 @@ export function AdminAvailabilityBlocks({ auth, onBusy }: { auth: SupabaseClient
           <option value="">店舗全体（全スタッフ）</option>
           {data?.staff.filter(s => s.active).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select></label>
-        <label className="checkline"><input type="checkbox" checked={allDay} onChange={e => { setReview(null); setAllDay(e.target.checked); }} />終日（終了日も含む）</label>
+        <label className="checkline"><input type="checkbox" checked={allDay} onChange={e => { const checked = e.target.checked; setReview(null); setAllDay(checked); setDraft(previous => adjustBlockEnd(previous, checked)); }} />終日（終了日も含む）</label>
         <div className="grid">
-          <label>開始日<input type="date" required value={draft.startDate} onChange={e => { setReview(null); setDraft({ ...draft, startDate: e.target.value }); }} /></label>
-          <label>終了日<input type="date" required min={draft.startDate} value={draft.endDate} onChange={e => { setReview(null); setDraft({ ...draft, endDate: e.target.value }); }} /></label>
+          <label>開始日<input type="date" required value={draft.startDate} onChange={e => changePeriod({ startDate: e.target.value })} /></label>
+          <label>終了日<input type="date" required min={minEndDate} value={draft.endDate} onChange={e => changePeriod({ endDate: e.target.value })} /></label>
           {!allDay && <>
-            <label>開始時間<select value={draft.startTime} onChange={e => { setReview(null); setDraft({ ...draft, startTime: e.target.value }); }}>{times.map(t => <option key={t}>{t}</option>)}</select></label>
-            <label>終了時間<select value={draft.endTime} onChange={e => { setReview(null); setDraft({ ...draft, endTime: e.target.value }); }}>{times.map(t => <option key={t}>{t}</option>)}</select></label>
+            <label>開始時間<select value={draft.startTime} onChange={e => changePeriod({ startTime: e.target.value })}>{times.map(t => <option key={t}>{t}</option>)}</select></label>
+            <label>終了時間<select required disabled={!endTimes.length} value={endTimes.includes(draft.endTime) ? draft.endTime : ""} onChange={e => changePeriod({ endTime: e.target.value })}>
+              {!endTimes.length && <option value="">開始日と終了日を選択してください</option>}
+              {endTimes.map(t => <option key={t}>{t}</option>)}
+            </select></label>
           </>}
         </div>
+        {!allDay && <p className="muted">終了は開始より後の時刻から選択できます。開始を23:45にすると、終了は翌日0:00以降になります。</p>}
         <label>理由（任意・管理画面のみ表示）<input maxLength={200} placeholder="臨時休業・休憩・研修など" value={draft.reason} onChange={e => { setReview(null); setDraft({ ...draft, reason: e.target.value }); }} /></label>
         <button className="primary" type="submit">内容を確認する</button>
       </form>
