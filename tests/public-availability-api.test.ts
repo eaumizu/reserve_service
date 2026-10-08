@@ -1,3 +1,4 @@
+vi.mock("../lib/booking-rules-server", () => ({ readBookingRules: async () => ({ advance_days: 30, cutoff_minutes: 60 }) }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const { from, adminAvailableStarts } = vi.hoisted(() => ({ from: vi.fn(), adminAvailableStarts: vi.fn() }));
@@ -9,7 +10,7 @@ let availableService: boolean;
 const queries: { table: string; eq: ReturnType<typeof vi.fn> }[] = [];
 const request = (date = "2030-01-01") => new NextRequest(`http://localhost/api/availability?date=${date}&serviceId=service`);
 beforeEach(() => {
-  vi.resetAllMocks(); queries.length = 0; queryError = false; availableService = true;
+  vi.resetAllMocks(); vi.spyOn(Date, "now").mockReturnValue(Date.parse("2029-12-31T00:00:00Z")); queries.length = 0; queryError = false; availableService = true;
   vi.stubEnv("NEXT_PUBLIC_DEFAULT_STORE_ID", "trusted-store");
   adminAvailableStarts.mockResolvedValue(["2030-01-01T03:00:00.000Z"]);
   from.mockImplementation(table => {
