@@ -34,6 +34,9 @@ export function AdminReservations() {
   const [canManageSettings, setCanManageSettings] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBlocks, setShowBlocks] = useState(false);
+  const [view, setView] = useState<"list" | "search">("list");
+  const [searchStarted, setSearchStarted] = useState(false);
+  const listFilters = useRef<ListFilters>({ date: japanToday(), staffId: "" });
   const [filters, setFilters] = useState<ListFilters>(() => ({ date: japanToday(), staffId: "" }));
   const [searchText, setSearchText] = useState("");
   const [searchBy, setSearchBy] = useState("name");
@@ -107,17 +110,32 @@ export function AdminReservations() {
       setPassword("");
       if (authError) throw new Error("メールアドレスまたはパスワードを確認してください。");
       await load({ date: japanToday(), staffId: "" }, 0);
+      setView("list"); setSearchStarted(false); listFilters.current = { date: japanToday(), staffId: "" };
       setSearchText(""); setSearchBy("name");
     } catch (e) { setError(e instanceof Error ? e.message : "ログインできませんでした。"); }
     finally { setBusy(false); }
   }
 
   async function refresh(selected = filters, selectedPage = page) {
+    if (view === "search") setSearchStarted(true);
     setDetailTarget(null);
     setBusy(true); setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(null); setRows([]);
     try { await load(selected, selectedPage); }
     catch (e) { setError(e instanceof Error ? e.message : "予約一覧を取得できませんでした。"); }
     finally { setBusy(false); }
+  }
+
+  async function switchView(next: "list" | "search") {
+    setShowSettings(false); setShowBlocks(false); setStatusTarget(null); setChangeTarget(null); setDetailTarget(null);
+    setError(""); setSuccess("");
+    if (next === "search") {
+      if (view === "list") listFilters.current = filters;
+      setView("search"); setSearchStarted(false); setSearchText(""); setSearchBy("name");
+      setFilters({ date: "", staffId: "" }); setPage(0); setHasMore(false); setRows([]);
+    } else {
+      setView("list"); setSearchStarted(false);
+      await refresh({ ...(view === "list" ? filters : listFilters.current), search: "", searchBy: "name" }, 0);
+    }
   }
 
   async function logout() {
@@ -175,18 +193,19 @@ export function AdminReservations() {
       <label>パスワード<input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></label>
       <button className="primary" disabled={busy} type="submit">{busy ? "確認中…" : "ログイン"}</button>
     </form> : <>
+      <nav className="grid" aria-label="予約画面の切り替え">
+        <button type="button" className={view === "list" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("list")}>予約一覧</button>
+        <button type="button" className={view === "search" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("search")}>予約検索</button>
+      </nav>
       <div className="grid">
-        <button disabled={busy} onClick={async () => { setShowSettings(false); setShowBlocks(false); await refresh(); }}>予約一覧を更新</button>
+        <button disabled={busy || (view === "search" && !searchStarted)} onClick={async () => { setShowSettings(false); setShowBlocks(false); await refresh(); }}>{view === "search" ? "検索結果を更新" : "予約一覧を更新"}</button>
         {canManageSettings && <>
-          <button className={showSettings ? "selected" : ""} disabled={busy} onClick={() => { setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowBlocks(false); setShowSettings(!showSettings); }}> {showSettings ? "予約一覧に戻る" : "店舗設定"} </button>
-          <button className={showBlocks ? "selected" : ""} disabled={busy} onClick={() => { setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowSettings(false); setShowBlocks(!showBlocks); }}> {showBlocks ? "予約一覧に戻る" : "受付停止・臨時休業"} </button>
+          <button className={showSettings ? "selected" : ""} disabled={busy} onClick={() => { if (showSettings) { void switchView("list"); return; } setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowBlocks(false); setShowSettings(true); }}> {showSettings ? "予約一覧に戻る" : "店舗設定"} </button>
+          <button className={showBlocks ? "selected" : ""} disabled={busy} onClick={() => { if (showBlocks) { void switchView("list"); return; } setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowSettings(false); setShowBlocks(true); }}> {showBlocks ? "予約一覧に戻る" : "受付停止・臨時休業"} </button>
         </>}
         <button disabled={busy} onClick={logout}>ログアウト</button>
       </div>
       {showSettings && canManageSettings ? <AdminStoreSettings auth={auth} onBusy={setBusy} /> : showBlocks && canManageSettings ? <AdminAvailabilityBlocks auth={auth} onBusy={setBusy} /> : <>
-      <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
-        <AdminBookingForm auth={auth} onCreated={refresh} onBusy={setBusy} />
-      </fieldset>
       {changeTarget && <dialog ref={changeDialogRef} className="reservation-change-dialog" aria-label="予約日時・担当者の変更"
         onCancel={event => { event.preventDefault(); if (!busy) setChangeTarget(null); }}>
         <button type="button" className="dialog-close" disabled={busy} onClick={() => setChangeTarget(null)}>変更画面を閉じる</button>
@@ -225,8 +244,8 @@ export function AdminReservations() {
           <button disabled={busy} onClick={updateReservationStatus}>{busy ? "処理中…" : `${statuses[statusTarget.status]}を確定する`}</button></div>
       </section>}
       <section className="card" aria-label="予約一覧の絞り込み">
-        <h2>予約一覧</h2>
-        <form onSubmit={event => { event.preventDefault(); void refresh({ ...filters, search: searchText.trim(), searchBy }, 0); }}>
+        <h2>{view === "search" ? "予約検索" : "予約一覧"}</h2>
+        {view === "search" && <form onSubmit={event => { event.preventDefault(); void refresh({ ...filters, search: searchText.trim(), searchBy }, 0); }}>
           <div className="grid">
             <label>検索対象<select disabled={busy} value={searchBy} onChange={e => setSearchBy(e.target.value)}><option value="name">お客様の名前</option><option value="phone">電話番号</option></select></label>
             <label>検索する文字<input type="search" maxLength={100} disabled={busy} value={searchText} onChange={e => setSearchText(e.target.value)} /></label>
@@ -234,7 +253,7 @@ export function AdminReservations() {
           <div className="grid"><button type="submit" disabled={busy}>予約を検索</button>
             <button type="button" disabled={busy} onClick={() => { setSearchText(""); setSearchBy("name"); void refresh({ ...filters, search: "", searchBy: "name", status: "" }, 0); }}>検索・状態条件を解除</button></div>
           <p className="muted">名前・電話番号の一部で検索できます。過去や別日の予約を探すときは「全期間」を選んでください。</p>
-        </form>
+        </form>}
         <div className="grid">
           <button type="button" disabled={busy} onClick={() => refresh({ ...filters, date: japanToday() }, 0)}>今日</button>
           <button type="button" disabled={busy} onClick={() => refresh({ ...filters, date: "" }, 0)}>全期間</button>
@@ -248,8 +267,11 @@ export function AdminReservations() {
           </select></label>
         </div>
         <p className="muted">{filters.date || "全期間"} ／ {filters.staffId ? listStaff.find(person => person.id === filters.staffId)?.name ?? "選択したスタッフ" : "全スタッフ"}。開始時刻の早い順で表示します。</p>
-        <p className="muted" aria-live="polite">検索：{filters.search ? `${filters.searchBy === "phone" ? "電話番号" : "名前"}「${filters.search}」` : "指定なし"} ／ {filters.status ? statuses[filters.status] : "全ての状態"}</p>
+        {view === "search" && <p className="muted" aria-live="polite">検索：{filters.search ? `${filters.searchBy === "phone" ? "電話番号" : "名前"}「${filters.search}」` : "指定なし"} ／ {filters.status ? statuses[filters.status] : "全ての状態"}</p>}
       </section>
+      {view === "search" && !searchStarted ? <p>検索条件を入力し「予約を検索」を押してください。初期設定は全期間です。</p> : <>
+      {view === "search" && <h2>検索結果</h2>}
+      {busy && <p role="status">予約を読み込み中…</p>}
       <p className="muted">日時はすべて日本時間です。1ページ100件まで表示します。キャンセル済みの予約も含みます。</p>
       <p className="muted">施術完了は片付け時間終了後、無断キャンセルは予約開始時刻以降に記録できます。時刻を過ぎたら「予約一覧を更新」を押してください。</p>
       <div style={{ overflowX: "auto" }}><table className="admin-table">
@@ -269,12 +291,16 @@ export function AdminReservations() {
           </div>}</td>
         </tr>)}</tbody>
       </table></div>
-      {!busy && !rows.length && <p>この条件に一致する予約はありません。</p>}
+      {!busy && !rows.length && <p>この条件に一致する予約はありません。{filters.date && "別の日の予約は「全期間」で確認できます。"}</p>}
       <div className="grid" aria-label="予約一覧のページ送り">
         <button disabled={busy || page === 0} onClick={() => refresh(filters, page - 1)}>前のページ</button>
         <p aria-live="polite">{page + 1}ページ目{!busy && `・${rows.length}件`}</p>
         <button disabled={busy || !hasMore} onClick={() => refresh(filters, page + 1)}>次のページ</button>
       </div>
+      </>}
+      {view === "list" && <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
+        <AdminBookingForm auth={auth} onCreated={refresh} onBusy={setBusy} />
+      </fieldset>}
       </>}
     </>}
   </section>;
