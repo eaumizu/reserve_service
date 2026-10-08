@@ -196,6 +196,17 @@ describe("admin reservations API", () => {
     expect(query.eq).toHaveBeenCalledWith("store_id", "trusted-store");
     expect(await response.json()).toEqual({ reservations: [], staff: [], hasMore: false, canManageSettings: false });
   });
+  it("returns phone and reservation notes only through the authenticated private list", async () => {
+    authorizeStaff.mockResolvedValue({ storeId: "trusted-store" });
+    const reservation = { id: reservationId, note: "予約時の備考", customers: { name: "確認用", phone: "09000000000" } };
+    query.range.mockResolvedValue({ data: [reservation], error: null });
+    const response = await GET(new NextRequest("http://localhost/api/admin/reservations?storeId=other-store"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).reservations).toEqual([reservation]);
+    expect(query.eq).toHaveBeenCalledWith("store_id", "trusted-store");
+    expect(query.select.mock.calls[0][0]).toContain("customers(name,phone)");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
   it("does not expose database errors or partial records", async () => {
     authorizeStaff.mockResolvedValue({ storeId: "trusted-store" });
     query.range.mockResolvedValue({ data: [{ id: "secret" }], error: { message: "private database error" } });

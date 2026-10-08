@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     if (!filters) return NextResponse.json({ error: "日付・スタッフ・表示ページを確認してください。" }, { status: 400, headers });
     const db = supabaseServer();
     let query = db.from("reservations")
-      .select("id,service_id,staff_id,start_at,end_at,updated_at,status,source,customers(name),services(name,buffer_after),staff(name)")
+      .select("id,service_id,staff_id,start_at,end_at,updated_at,status,source,note,customers(name,phone),services(name,buffer_after),staff(name)")
       .eq("store_id", staff.storeId);
     if (filters.start && filters.end) query = query.gte("start_at", filters.start).lt("start_at", filters.end);
     if (filters.staffId) query = query.eq("staff_id", filters.staffId);

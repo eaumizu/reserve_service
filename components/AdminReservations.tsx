@@ -30,6 +30,7 @@ export function AdminReservations() {
   const [success, setSuccess] = useState("");
   const [statusTarget, setStatusTarget] = useState<{ reservation: Reservation; status: "cancelled" | ReservationOutcome } | null>(null);
   const [changeTarget, setChangeTarget] = useState<Reservation | null>(null);
+  const [detailTarget, setDetailTarget] = useState<Reservation | null>(null);
   const [canManageSettings, setCanManageSettings] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBlocks, setShowBlocks] = useState(false);
@@ -40,6 +41,7 @@ export function AdminReservations() {
   const loadSequence = useRef(0);
   const confirmationRef = useRef<HTMLElement>(null);
   const changeDialogRef = useRef<HTMLDialogElement>(null);
+  const detailDialogRef = useRef<HTMLDialogElement>(null);
   const successRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
@@ -52,9 +54,13 @@ export function AdminReservations() {
   }, [changeTarget]);
 
   useEffect(() => {
+    if (detailTarget && detailDialogRef.current && !detailDialogRef.current.open) detailDialogRef.current.showModal();
+  }, [detailTarget]);
+
+  useEffect(() => {
     if (!auth) return;
     const { data: { subscription } } = auth.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") { loadSequence.current++; setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setStatusTarget(null); setChangeTarget(null); setSuccess(""); setCanManageSettings(false); setShowSettings(false); setShowBlocks(false); }
+      if (event === "SIGNED_OUT") { loadSequence.current++; setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setStatusTarget(null); setChangeTarget(null); setDetailTarget(null); setSuccess(""); setCanManageSettings(false); setShowSettings(false); setShowBlocks(false); }
     });
     return () => subscription.unsubscribe();
   }, [auth]);
@@ -102,6 +108,7 @@ export function AdminReservations() {
   }
 
   async function refresh(selected = filters, selectedPage = page) {
+    setDetailTarget(null);
     setBusy(true); setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(null); setRows([]);
     try { await load(selected, selectedPage); }
     catch (e) { setError(e instanceof Error ? e.message : "予約一覧を取得できませんでした。"); }
@@ -109,6 +116,7 @@ export function AdminReservations() {
   }
 
   async function logout() {
+    setDetailTarget(null);
     loadSequence.current++;
     setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(null);
     setCanManageSettings(false); setShowSettings(false); setShowBlocks(false);
@@ -182,6 +190,24 @@ export function AdminReservations() {
             onChanged={reservationChanged} onClose={() => setChangeTarget(null)} onBusy={setBusy} />
         </fieldset>
       </dialog>}
+      {detailTarget && <dialog ref={detailDialogRef} className="reservation-change-dialog" aria-labelledby="reservation-detail-title"
+        onCancel={event => { event.preventDefault(); setDetailTarget(null); }}>
+        <button type="button" className="dialog-close" onClick={() => setDetailTarget(null)}>詳細を閉じる</button>
+        <h2 id="reservation-detail-title">予約の詳細</h2>
+        <p className="muted">日時はすべて日本時間です。</p>
+        <dl className="reservation-details">
+          <dt>お客様</dt><dd>{detailTarget.customers?.name ?? "記載なし"}</dd>
+          <dt>電話番号</dt><dd>{detailTarget.customers?.phone || "記載なし"}</dd>
+          <dt>メニュー</dt><dd>{detailTarget.services?.name ?? "記載なし"}</dd>
+          <dt>担当者</dt><dd>{detailTarget.staff?.name ?? "記載なし"}</dd>
+          <dt>施術開始</dt><dd>{new Date(detailTarget.start_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</dd>
+          <dt>施術終了</dt><dd>{new Date(detailTarget.end_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</dd>
+          <dt>状態</dt><dd><span className={`reservation-status reservation-status-${detailTarget.status}`}>{statuses[detailTarget.status] ?? detailTarget.status}</span></dd>
+          <dt>受付経路</dt><dd>{sources[detailTarget.source] ?? detailTarget.source}</dd>
+          <dt>予約時の備考</dt><dd className="reservation-note">{detailTarget.note?.trim() || "記載なし"}</dd>
+          <dt>最終更新</dt><dd>{new Date(detailTarget.updated_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</dd>
+        </dl>
+      </dialog>}
       {statusTarget && <section ref={confirmationRef} tabIndex={-1} className="card reservation-confirmation" aria-label="予約状態の更新確認">
         <h2>{statusTarget.status === "cancelled" ? "この予約をキャンセルしますか？" : `「${statuses[statusTarget.status]}」を記録しますか？`}</h2>
         <p>{statusTarget.reservation.customers?.name} 様 ／ {statusTarget.reservation.services?.name}</p>
@@ -214,7 +240,7 @@ export function AdminReservations() {
           <td>{new Date(r.start_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</td>
           <td>{r.customers?.name}</td><td>{r.services?.name}</td><td>{r.staff?.name}</td>
           <td><span className={`reservation-status reservation-status-${r.status}`}>{statuses[r.status] ?? r.status}</span></td><td>{sources[r.source] ?? r.source}</td>
-          <td>{r.status === "confirmed" ? <div className="grid">
+          <td><button type="button" disabled={busy} onClick={() => setDetailTarget(r)}>詳細</button>{r.status === "confirmed" ? <div className="grid">
             <button aria-expanded={changeTarget?.id === r.id} aria-controls={changeTarget?.id === r.id ? "reservation-change-form" : undefined} disabled={busy} onClick={() => openReservationChange(r)}>{changeTarget?.id === r.id ? "変更画面を表示中" : "変更"}</button>
             <button disabled={busy} onClick={() => { setError(""); setSuccess(""); setChangeTarget(null); setStatusTarget({ reservation: r, status: "cancelled" }); }}>キャンセル</button>
             <button disabled={busy || !canRecordOutcome(r, "completed")} title="施術と片付け時間の終了後に操作できます" onClick={() => { setError(""); setSuccess(""); setChangeTarget(null); setStatusTarget({ reservation: r, status: "completed" }); }}>施術完了</button>

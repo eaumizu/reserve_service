@@ -6,8 +6,8 @@ export type ReservationInput = { storeId: string; serviceId: string; staffId: st
 export type TimeRange = { start: Date; end: Date };
 export type AdminReservation = {
   id: string; service_id: string; staff_id: string; start_at: string; end_at: string; updated_at: string;
-  status: string; source: string;
-  customers: { name: string } | null;
+  status: string; source: string; note?: string | null;
+  customers: { name: string; phone?: string } | null;
   services: { name: string; buffer_after?: number } | null;
   staff: { name: string } | null;
 };
