@@ -12,7 +12,9 @@ import type { AdminReservation as Reservation } from "../lib/reservations/types"
 const statuses: Record<string, string> = { confirmed: "確定", cancelled: "キャンセル", completed: "施術完了", no_show: "無断キャンセル" };
 const sources: Record<string, string> = { web: "Web", phone: "電話", walk_in: "店頭", admin: "管理" };
 const japanToday = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
-type ListFilters = { date: string; staffId: string; search?: string; searchBy?: string; status?: string };
+type ListFilters = { date: string; staffId: string; search?: string; searchBy?: string; status?: string; scope?: string };
+type ReservationView = "list" | "search" | "history" | "unrecorded";
+const viewTitles: Record<ReservationView, string> = { list: "予約一覧", search: "予約検索", history: "予約履歴", unrecorded: "結果の記録が必要な予約" };
 type ListStaff = { id: string; name: string; active: boolean };
 
 export function AdminReservations() {
@@ -34,10 +36,10 @@ export function AdminReservations() {
   const [canManageSettings, setCanManageSettings] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBlocks, setShowBlocks] = useState(false);
-  const [view, setView] = useState<"list" | "search">("list");
+  const [view, setView] = useState<ReservationView>("list");
   const [searchStarted, setSearchStarted] = useState(false);
-  const listFilters = useRef<ListFilters>({ date: japanToday(), staffId: "" });
-  const [filters, setFilters] = useState<ListFilters>(() => ({ date: japanToday(), staffId: "" }));
+  const listFilters = useRef<ListFilters>({ date: "", staffId: "", scope: "upcoming" });
+  const [filters, setFilters] = useState<ListFilters>({ date: "", staffId: "", scope: "upcoming" });
   const [searchText, setSearchText] = useState("");
   const [searchBy, setSearchBy] = useState("name");
   const [listStaff, setListStaff] = useState<ListStaff[]>([]);
@@ -80,6 +82,7 @@ export function AdminReservations() {
     if (selected.staffId) params.set("staffId", selected.staffId);
     if (selected.search) { params.set("q", selected.search); params.set("searchBy", selected.searchBy ?? "name"); }
     if (selected.status) params.set("status", selected.status);
+    if (selected.scope) params.set("scope", selected.scope);
     const response = await fetch(`/api/admin/reservations?${params}`, {
       headers: { Authorization: `Bearer ${session.access_token}` }, cache: "no-store",
     });
@@ -109,8 +112,8 @@ export function AdminReservations() {
       const { error: authError } = await auth.auth.signInWithPassword({ email, password });
       setPassword("");
       if (authError) throw new Error("メールアドレスまたはパスワードを確認してください。");
-      await load({ date: japanToday(), staffId: "" }, 0);
-      setView("list"); setSearchStarted(false); listFilters.current = { date: japanToday(), staffId: "" };
+      await load({ date: "", staffId: "", scope: "upcoming" }, 0);
+      setView("list"); setSearchStarted(false); listFilters.current = { date: "", staffId: "", scope: "upcoming" };
       setSearchText(""); setSearchBy("name");
     } catch (e) { setError(e instanceof Error ? e.message : "ログインできませんでした。"); }
     finally { setBusy(false); }
@@ -125,16 +128,17 @@ export function AdminReservations() {
     finally { setBusy(false); }
   }
 
-  async function switchView(next: "list" | "search") {
+  async function switchView(next: ReservationView) {
     setShowSettings(false); setShowBlocks(false); setStatusTarget(null); setChangeTarget(null); setDetailTarget(null);
     setError(""); setSuccess("");
+    if (view === "list") listFilters.current = filters;
     if (next === "search") {
-      if (view === "list") listFilters.current = filters;
       setView("search"); setSearchStarted(false); setSearchText(""); setSearchBy("name");
-      setFilters({ date: "", staffId: "" }); setPage(0); setHasMore(false); setRows([]);
+      setFilters({ date: "", staffId: "", scope: "all" }); setPage(0); setHasMore(false); setRows([]);
     } else {
-      setView("list"); setSearchStarted(false);
-      await refresh({ ...(view === "list" ? filters : listFilters.current), search: "", searchBy: "name" }, 0);
+      setView(next); setSearchStarted(false);
+      await refresh(next === "list" ? { ...listFilters.current, search: "", searchBy: "name", scope: "upcoming" }
+        : { date: "", staffId: "", scope: next === "history" ? "history" : "unrecorded" }, 0);
     }
   }
 
@@ -196,6 +200,8 @@ export function AdminReservations() {
       <nav className="grid" aria-label="予約画面の切り替え">
         <button type="button" className={view === "list" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("list")}>予約一覧</button>
         <button type="button" className={view === "search" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("search")}>予約検索</button>
+        <button type="button" className={view === "history" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("history")}>予約履歴</button>
+        <button type="button" className={view === "unrecorded" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("unrecorded")}>結果の記録が必要な予約</button>
       </nav>
       <div className="grid">
         <button disabled={busy || (view === "search" && !searchStarted)} onClick={async () => { setShowSettings(false); setShowBlocks(false); await refresh(); }}>{view === "search" ? "検索結果を更新" : "予約一覧を更新"}</button>
@@ -244,7 +250,10 @@ export function AdminReservations() {
           <button disabled={busy} onClick={updateReservationStatus}>{busy ? "処理中…" : `${statuses[statusTarget.status]}を確定する`}</button></div>
       </section>}
       <section className="card" aria-label="予約一覧の絞り込み">
-        <h2>{view === "search" ? "予約検索" : "予約一覧"}</h2>
+        <h2>{viewTitles[view]}</h2>
+        {view === "list" && <p>施術中・これから施術する確定済み予約を、開始時刻の早い順に表示します。終了時刻を過ぎた予約は「結果の記録が必要な予約」、記録済みの予約は「予約履歴」で確認できます。</p>}
+        {view === "history" && <p>施術完了・無断キャンセル・キャンセル済みの予約を、新しい予約日時から表示します。</p>}
+        {view === "unrecorded" && <p>施術終了時刻を過ぎ、まだ結果が記録されていない予約です。実際の来店結果を確認して「施術完了」「無断キャンセル」などを記録してください。記録後は予約履歴へ移ります。</p>}
         {view === "search" && <form onSubmit={event => { event.preventDefault(); void refresh({ ...filters, search: searchText.trim(), searchBy }, 0); }}>
           <div className="grid">
             <label>検索対象<select disabled={busy} value={searchBy} onChange={e => setSearchBy(e.target.value)}><option value="name">お客様の名前</option><option value="phone">電話番号</option></select></label>
@@ -262,17 +271,17 @@ export function AdminReservations() {
             <option value="">全スタッフ</option>
             {listStaff.map(person => <option key={person.id} value={person.id}>{person.name}{!person.active && "（受付停止中）"}</option>)}
           </select></label>
-          <label>予約状態<select disabled={busy} value={filters.status ?? ""} onChange={e => refresh({ ...filters, status: e.target.value }, 0)}>
-            <option value="">全ての状態</option>{Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select></label>
+          {(view === "search" || view === "history") && <label>予約状態<select disabled={busy} value={filters.status ?? ""} onChange={e => refresh({ ...filters, status: e.target.value }, 0)}>
+            <option value="">全ての状態</option>{Object.entries(statuses).filter(([value]) => view !== "history" || value !== "confirmed").map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select></label>}
         </div>
-        <p className="muted">{filters.date || "全期間"} ／ {filters.staffId ? listStaff.find(person => person.id === filters.staffId)?.name ?? "選択したスタッフ" : "全スタッフ"}。開始時刻の早い順で表示します。</p>
+        <p className="muted">{filters.date || "全期間"} ／ {filters.staffId ? listStaff.find(person => person.id === filters.staffId)?.name ?? "選択したスタッフ" : "全スタッフ"}。{view === "history" ? "新しい予約日時から" : "開始時刻の早い順で"}表示します。</p>
         {view === "search" && <p className="muted" aria-live="polite">検索：{filters.search ? `${filters.searchBy === "phone" ? "電話番号" : "名前"}「${filters.search}」` : "指定なし"} ／ {filters.status ? statuses[filters.status] : "全ての状態"}</p>}
       </section>
       {view === "search" && !searchStarted ? <p>検索条件を入力し「予約を検索」を押してください。初期設定は全期間です。</p> : <>
       {view === "search" && <h2>検索結果</h2>}
       {busy && <p role="status">予約を読み込み中…</p>}
-      <p className="muted">日時はすべて日本時間です。1ページ100件まで表示します。キャンセル済みの予約も含みます。</p>
+      <p className="muted">日時はすべて日本時間です。1ページ100件まで表示します。</p>
       <p className="muted">施術完了は片付け時間終了後、無断キャンセルは予約開始時刻以降に記録できます。時刻を過ぎたら「予約一覧を更新」を押してください。</p>
       <div style={{ overflowX: "auto" }}><table className="admin-table">
         <thead><tr><th>日時</th><th>お客様</th><th>メニュー</th><th>担当</th><th>状態</th><th>経路</th><th>操作</th></tr></thead>
