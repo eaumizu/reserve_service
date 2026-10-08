@@ -15,6 +15,21 @@ beforeEach(() => {
 });
 const post = (startAt = payload.startAt) => POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ ...payload, startAt }) }));
 describe("public booking rules API", () => {
+  it("saves optional email in the atomic booking call", async () => {
+    const response = await POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ ...payload, customerEmail: " Test@example.com " }) }));
+    expect(response.status).toBe(201);
+    expect(rpc).toHaveBeenCalledWith("create_reservation_with_email_atomic", expect.objectContaining({ p_customer_email: "Test@example.com", p_store_id: "trusted", p_source: "web" }));
+  });
+  it("rejects invalid email before creating a reservation", async () => {
+    const response = await POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ ...payload, customerEmail: "bad" }) }));
+    expect(response.status).toBe(400); expect(rpc).not.toHaveBeenCalled();
+  });
+  it("does not discard email when the migration is absent", async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: "PGRST202", message: "private schema detail" } });
+    const response = await POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ ...payload, customerEmail: "test@example.com" }) }));
+    expect(response.status).toBe(503); expect(await response.text()).not.toContain("private schema detail");
+    expect(rpc).toHaveBeenCalledOnce();
+  });
   it("rejects a slot that expired after display without creating records", async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2030-01-01T10:00:01+09:00"));
     expect((await post()).status).toBe(409); expect(rpc).not.toHaveBeenCalled();

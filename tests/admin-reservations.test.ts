@@ -137,6 +137,17 @@ function post(body: unknown) {
   }));
 }
 describe("manual booking API", () => {
+  it("stores email for a manual booking using the verified store", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    rpc.mockResolvedValue({ data: { id: "reservation", customer_email: "test@example.com" }, error: null });
+    expect((await post({ ...input, customerEmail: " test@example.com " })).status).toBe(201);
+    expect(rpc).toHaveBeenCalledWith("create_reservation_with_email_atomic", expect.objectContaining({ p_store_id: storeId, p_customer_email: "test@example.com" }));
+  });
+  it("rejects invalid email without creating a manual booking", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    expect((await post({ ...input, customerEmail: "bad" })).status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+  });
   it.each(["15", "45"])("accepts a start at minute %s", async minute => {
     authorizeStaff.mockResolvedValue({ storeId });
     rpc.mockResolvedValue({ data: { id: "reservation" }, error: null });
@@ -181,6 +192,16 @@ describe("manual booking API", () => {
   });
 });
 describe("admin reservations API", () => {
+  it("keeps the tenant-scoped list available before email SQL is applied", async () => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    query.range.mockResolvedValueOnce({ data: null, error: { code: "42703" } }).mockResolvedValueOnce({ data: [{ id: reservationId }], error: null });
+    const response = await GET(new NextRequest("http://localhost/api/admin/reservations?scope=upcoming"));
+    expect(response.status).toBe(200);
+    expect(query.eq.mock.calls.filter(([key]) => key === "store_id")).toEqual([["store_id", storeId], ["store_id", storeId]]);
+    expect(query.select.mock.calls[0][0]).toContain("customer_email");
+    expect(query.select.mock.calls[1][0]).not.toContain("customer_email");
+    expect((await response.json()).reservations).toEqual([{ id: reservationId }]);
+  });
   it.each(["upcoming", "unrecorded", "history"])("separates %s reservations before paging and scopes them to the staff store", async scope => {
     authorizeStaff.mockResolvedValue({ storeId });
     expect((await GET(new NextRequest(`http://localhost/api/admin/reservations?scope=${scope}`))).status).toBe(200);

@@ -229,6 +229,7 @@ export function AdminReservations() {
         <dl className="reservation-details">
           <dt>お客様</dt><dd>{detailTarget.customers?.name ?? "記載なし"}</dd>
           <dt>電話番号</dt><dd>{detailTarget.customers?.phone || "記載なし"}</dd>
+          <dt>メールアドレス</dt><dd>{detailTarget.customer_email ? <><span>{detailTarget.customer_email}</span> ／ <a href={`mailto:${encodeURIComponent(detailTarget.customer_email)}`}>メールを作成</a></> : "記載なし"}</dd>
           <dt>メニュー</dt><dd>{detailTarget.services?.name ?? "記載なし"}</dd>
           <dt>担当者</dt><dd>{detailTarget.staff?.name ?? "記載なし"}</dd>
           <dt>施術開始</dt><dd>{new Date(detailTarget.start_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</dd>

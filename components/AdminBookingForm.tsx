@@ -1,5 +1,6 @@
 "use client";
 
+import { parseCustomerEmail } from "../lib/reservations/email";
 import { useEffect, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -23,6 +24,7 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
   const [slotsError, setSlotsError] = useState("");
   const [slotsVersion, setSlotsVersion] = useState(0);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState("phone");
   const [note, setNote] = useState("");
@@ -87,6 +89,7 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!options || busy || slotsLoading || !start || !slots.includes(start)) return;
+    if (parseCustomerEmail(email) === undefined) { setError("メールアドレスを確認してください。"); return; }
     if (!confirmed) { setError(""); setSuccess(""); setConfirmed(true); return; }
     setBusy(true); onBusy(true); setError(""); setSuccess("");
     try {
@@ -95,7 +98,7 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
       const response = await fetch("/api/admin/reservations", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ storeId: options.storeId, serviceId, staffId,
-          startAt: start, customerName: name, customerPhone: phone, source, note }),
+          startAt: start, customerName: name, customerPhone: phone, customerEmail: email.trim(), source, note }),
       });
       const result = await response.json();
       if (!response.ok) {
@@ -103,7 +106,7 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
         if (response.status === 409) { clearSlot(); setSlotsVersion(version => version + 1); }
         throw new Error(result.error ?? "予約を登録できませんでした。");
       }
-      setConfirmed(false); setName(""); setPhone(""); setStart(""); setNote("");
+      setConfirmed(false); setName(""); setPhone(""); setEmail(""); setStart(""); setNote("");
       setSlotsVersion(version => version + 1);
       setSuccess("予約を登録しました。");
       await onCreated();
@@ -119,7 +122,7 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
     {!options ? <p>予約設定を読み込み中…</p> : confirmed ? <>
       <p>{options.services.find(service => service.id === serviceId)?.name} ／ {eligibleStaff.find(person => person.id === staffId)?.name}</p>
       <p>{new Date(start).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}（日本時間）</p>
-      <p>{name} 様 ／ {phone}</p>
+      <p>{name} 様 ／ {phone}<br />メール：{email.trim() || "記載なし"}</p>
       <p>受付経路：{source === "phone" ? "電話" : source === "walk_in" ? "店頭" : "管理"}</p>
       {note && <p>備考：{note}</p>}
       <div className="grid"><button type="button" disabled={busy} onClick={() => setConfirmed(false)}>戻る</button>
@@ -143,6 +146,8 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
       <button type="button" disabled={busy || slotsLoading || !serviceId || !staffId || !date} onClick={() => { clearSlot(); setSlotsVersion(version => version + 1); }}>空き時間を更新</button>
       <label>お名前<input required maxLength={100} value={name} onChange={e => setName(e.target.value)} /></label>
       <label>電話番号<input required type="tel" maxLength={50} value={phone} onChange={e => setPhone(e.target.value)} /></label>
+      <label>メールアドレス（任意）<input type="email" maxLength={254} autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
+      {parseCustomerEmail(email) === undefined && <p className="error">メールアドレスを確認してください。</p>}
       <label>備考（任意）<textarea maxLength={2000} value={note} onChange={e => setNote(e.target.value)} /></label>
       <button className="primary" type="submit" disabled={busy || slotsLoading || !start || !slots.includes(start) || !name.trim() || !phone.trim()}>確認画面へ</button>
     </>}

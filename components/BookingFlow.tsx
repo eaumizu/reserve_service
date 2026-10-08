@@ -1,4 +1,5 @@
 "use client";
+import { parseCustomerEmail } from "../lib/reservations/email";
 import { useEffect, useState } from "react";
 import type { BookingRules } from "../lib/booking-rules";
 type Service = { id: string; name: string; duration_minutes: number; price: number };
@@ -12,6 +13,7 @@ export function BookingFlow() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [slot, setSlot] = useState<Slot>();
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [stage, setStage] = useState<"form" | "confirm" | "done">("form");
   const [error, setError] = useState("");
@@ -43,7 +45,7 @@ export function BookingFlow() {
     if (busy || !service || !slot) return;
     setBusy(true); setError("");
     try {
-      const response = await fetch("/api/reservations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ storeId: process.env.NEXT_PUBLIC_DEFAULT_STORE_ID, serviceId: service.id, staffId: slot.staffId, startAt: slot.startAt, customerName: name, customerPhone: phone, source: "web" }) });
+      const response = await fetch("/api/reservations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ storeId: process.env.NEXT_PUBLIC_DEFAULT_STORE_ID, serviceId: service.id, staffId: slot.staffId, startAt: slot.startAt, customerName: name, customerPhone: phone, customerEmail: email.trim(), source: "web" }) });
       if (response.ok) setStage("done");
       else { setError((await response.json()).error); setStage("form"); setSlot(undefined); setSlots([]); }
     } catch { setError("通信エラーです。予約結果を店舗に確認してください。"); }
@@ -62,10 +64,12 @@ export function BookingFlow() {
       {!loading && service && date && !slots.length && !error && <p>この日に受付できる空き枠はありません。別の日付を選択してください。</p>}
       <label>お名前<input value={name} onChange={e => setName(e.target.value)} /></label>
       <label>電話番号<input inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} /></label>
-      <button className="primary" disabled={!rules || !service || !slot || !name.trim() || !phone.trim() || loading} onClick={() => setStage("confirm")}>確認画面へ</button>
+      <label>メールアドレス（任意）<input type="email" autoComplete="email" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
+      <p className="muted">店舗からの連絡先として保存します。自動メール通知はまだ行いません。</p>
+      <button className="primary" disabled={parseCustomerEmail(email) === undefined || !rules || !service || !slot || !name.trim() || !phone.trim() || loading} onClick={() => setStage("confirm")}>確認画面へ</button>
     </>}
     {stage === "confirm" && <>
-      <p>{service?.name}<br />{slot && new Date(slot.startAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}／{slot?.staffName}<br />{name} 様（{phone}）</p>
+      <p>{service?.name}<br />{slot && new Date(slot.startAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}／{slot?.staffName}<br />{name} 様（{phone}）<br />メール：{email.trim() || "記載なし"}</p>
       <div className="grid"><button disabled={busy} onClick={() => setStage("form")}>戻る</button><button className="primary" disabled={busy} onClick={submit}>{busy ? "予約を確定中…" : "予約を確定する"}</button></div>
     </>}
   </section>;
