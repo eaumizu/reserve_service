@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 
 const { authorizeStaff, supabaseServer, query, roster, rpc } = vi.hoisted(() => ({
   authorizeStaff: vi.fn(), supabaseServer: vi.fn(), rpc: vi.fn(),
-  query: { select: vi.fn(), ilike: vi.fn(), eq: vi.fn(), gte: vi.fn(), lt: vi.fn(), lte: vi.fn(), order: vi.fn(), range: vi.fn(), update: vi.fn(), maybeSingle: vi.fn() },
+  query: { select: vi.fn(), in: vi.fn(), gt: vi.fn(), ilike: vi.fn(), eq: vi.fn(), gte: vi.fn(), lt: vi.fn(), lte: vi.fn(), order: vi.fn(), range: vi.fn(), update: vi.fn(), maybeSingle: vi.fn() },
   roster: { select: vi.fn(), eq: vi.fn(), order: vi.fn(), then: vi.fn() },
 }));
 vi.mock("../lib/admin-auth", () => ({ authorizeStaff }));
@@ -13,7 +13,7 @@ import { GET, POST, PATCH } from "../app/api/admin/reservations/route";
 beforeEach(() => {
   vi.resetAllMocks();
   supabaseServer.mockReturnValue({ from: (table: string) => table === "staff" ? roster : query, rpc });
-  query.ilike.mockReturnValue(query); query.select.mockReturnValue(query); query.eq.mockReturnValue(query); query.order.mockReturnValue(query);
+  query.in.mockReturnValue(query); query.gt.mockReturnValue(query); query.ilike.mockReturnValue(query); query.select.mockReturnValue(query); query.eq.mockReturnValue(query); query.order.mockReturnValue(query);
   query.gte.mockReturnValue(query); query.lt.mockReturnValue(query); query.lte.mockReturnValue(query);
   query.range.mockResolvedValue({ data: [], error: null });
   roster.select.mockReturnValue(roster); roster.eq.mockReturnValue(roster); roster.order.mockReturnValue(roster);
@@ -181,6 +181,25 @@ describe("manual booking API", () => {
   });
 });
 describe("admin reservations API", () => {
+  it.each(["upcoming", "unrecorded", "history"])("separates %s reservations before paging and scopes them to the staff store", async scope => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    expect((await GET(new NextRequest(`http://localhost/api/admin/reservations?scope=${scope}`))).status).toBe(200);
+    expect(query.eq).toHaveBeenCalledWith("store_id", storeId);
+    if (scope === "history") {
+      expect(query.in).toHaveBeenCalledWith("status", ["cancelled", "completed", "no_show"]);
+      expect(query.order).toHaveBeenCalledWith("start_at", { ascending: false });
+    } else {
+      expect(query.eq).toHaveBeenCalledWith("status", "confirmed");
+      expect(scope === "upcoming" ? query.gt : query.lte).toHaveBeenCalledWith("end_at", expect.any(String));
+      expect(query.order).toHaveBeenCalledWith("start_at", { ascending: true });
+    }
+    expect(query.range).toHaveBeenCalledWith(0, 100);
+  });
+  it.each(["scope=bad", "scope=history&status=confirmed", "scope=upcoming&status=completed", "scope=unrecorded&status=no_show"])("rejects inconsistent result groups %s", async params => {
+    authorizeStaff.mockResolvedValue({ storeId });
+    expect((await GET(new NextRequest(`http://localhost/api/admin/reservations?${params}`))).status).toBe(400);
+    expect(supabaseServer).not.toHaveBeenCalled();
+  });
   it.each(["name", "phone"])("searches by %s and status before paging with an inner customer join", async searchBy => {
     authorizeStaff.mockResolvedValue({ storeId });
     const params = new URLSearchParams({ q: "  90%_\\  ", searchBy, status: "completed", page: "1" });

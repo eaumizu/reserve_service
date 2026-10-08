@@ -18,11 +18,15 @@ export async function GET(request: NextRequest) {
       .eq("store_id", staff.storeId);
     if (filters.start && filters.end) query = query.gte("start_at", filters.start).lt("start_at", filters.end);
     if (filters.staffId) query = query.eq("staff_id", filters.staffId);
+    const now = new Date().toISOString();
+    if (filters.scope === "upcoming") query = query.eq("status", "confirmed").gt("end_at", now);
+    if (filters.scope === "unrecorded") query = query.eq("status", "confirmed").lte("end_at", now);
+    if (filters.scope === "history") query = query.in("status", ["cancelled", "completed", "no_show"]);
     if (filters.status) query = query.eq("status", filters.status);
     if (filters.search) query = query.ilike(`customers.${filters.searchBy}`, literalSearchPattern(filters.search));
     const offset = filters.page * RESERVATION_PAGE_SIZE;
     const [reservations, roster] = await Promise.all([
-      query.order("start_at", { ascending: true }).order("id", { ascending: true }).range(offset, offset + RESERVATION_PAGE_SIZE),
+      query.order("start_at", { ascending: filters.scope !== "history" }).order("id", { ascending: true }).range(offset, offset + RESERVATION_PAGE_SIZE),
       db.from("staff").select("id,name,active").eq("store_id", staff.storeId).order("name").order("id"),
     ]);
     if (reservations.error || roster.error) throw new Error("Reservation list read failed");
