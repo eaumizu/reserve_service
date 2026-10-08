@@ -6,6 +6,7 @@ import { AdminBookingForm } from "./AdminBookingForm";
 import { AdminRescheduleForm } from "./AdminRescheduleForm";
 import { AdminStoreSettings } from "./AdminStoreSettings";
 import { AdminAvailabilityBlocks } from "./AdminAvailabilityBlocks";
+import { StaffNoteEditor } from "./StaffNoteEditor";
 import { canRecordOutcome, type ReservationOutcome } from "../lib/reservations/outcome";
 import type { AdminReservation as Reservation } from "../lib/reservations/types";
 
@@ -221,8 +222,8 @@ export function AdminReservations() {
         </fieldset>
       </dialog>}
       {detailTarget && <dialog ref={detailDialogRef} className="reservation-change-dialog" aria-labelledby="reservation-detail-title"
-        onCancel={event => { event.preventDefault(); setDetailTarget(null); }}>
-        <button type="button" className="dialog-close" onClick={() => setDetailTarget(null)}>詳細を閉じる</button>
+        onCancel={event => { event.preventDefault(); if (!busy) setDetailTarget(null); }}>
+        <button type="button" className="dialog-close" disabled={busy} onClick={() => setDetailTarget(null)}>詳細を閉じる</button>
         <h2 id="reservation-detail-title">予約の詳細</h2>
         <p className="muted">日時はすべて日本時間です。</p>
         <dl className="reservation-details">
@@ -237,6 +238,7 @@ export function AdminReservations() {
           <dt>予約時の備考</dt><dd className="reservation-note">{detailTarget.note?.trim() || "記載なし"}</dd>
           <dt>最終更新</dt><dd>{new Date(detailTarget.updated_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</dd>
         </dl>
+        <StaffNoteEditor key={detailTarget.id} auth={auth} reservationId={detailTarget.id} onBusy={setBusy} />
       </dialog>}
       {statusTarget && <section ref={confirmationRef} tabIndex={-1} className="card reservation-confirmation" aria-label="予約状態の更新確認">
         <h2>{statusTarget.status === "cancelled" ? "この予約をキャンセルしますか？" : `「${statuses[statusTarget.status]}」を記録しますか？`}</h2>
