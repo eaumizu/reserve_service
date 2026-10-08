@@ -1,3 +1,4 @@
+import { parseCustomerEmail } from "../../../../lib/reservations/email";
 import { TIME_STEP_MS } from "../../../../lib/reservations/time-grid";
 import { authorizeStaff } from "../../../../lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -13,8 +14,10 @@ export async function GET(request: NextRequest) {
     const filters = parseReservationListFilters(request.nextUrl.searchParams);
     if (!filters) return NextResponse.json({ error: "日付・スタッフ・表示ページを確認してください。" }, { status: 400, headers });
     const db = supabaseServer();
+    const offset = filters.page * RESERVATION_PAGE_SIZE;
+    const listQuery = (includeEmail: boolean) => {
     let query = db.from("reservations")
-      .select(`id,service_id,staff_id,start_at,end_at,updated_at,status,source,note,customers${filters.search ? "!inner" : ""}(name,phone),services(name,buffer_after),staff(name)`)
+      .select(`id,service_id,staff_id,start_at,end_at,updated_at,status,source,note,${includeEmail ? "customer_email," : ""}customers${filters.search ? "!inner" : ""}(name,phone),services(name,buffer_after),staff(name)`)
       .eq("store_id", staff.storeId);
     if (filters.start && filters.end) query = query.gte("start_at", filters.start).lt("start_at", filters.end);
     if (filters.staffId) query = query.eq("staff_id", filters.staffId);
@@ -24,11 +27,13 @@ export async function GET(request: NextRequest) {
     if (filters.scope === "history") query = query.in("status", ["cancelled", "completed", "no_show"]);
     if (filters.status) query = query.eq("status", filters.status);
     if (filters.search) query = query.ilike(`customers.${filters.searchBy}`, literalSearchPattern(filters.search));
-    const offset = filters.page * RESERVATION_PAGE_SIZE;
-    const [reservations, roster] = await Promise.all([
-      query.order("start_at", { ascending: filters.scope !== "history" }).order("id", { ascending: true }).range(offset, offset + RESERVATION_PAGE_SIZE),
+    return query.order("start_at", { ascending: filters.scope !== "history" }).order("id", { ascending: true }).range(offset, offset + RESERVATION_PAGE_SIZE);
+    };
+    let [reservations, roster] = await Promise.all([
+      listQuery(true),
       db.from("staff").select("id,name,active").eq("store_id", staff.storeId).order("name").order("id"),
     ]);
+    if (reservations.error?.code === "42703" || reservations.error?.code === "PGRST204") reservations = await listQuery(false);
     if (reservations.error || roster.error) throw new Error("Reservation list read failed");
     return NextResponse.json({ reservations: (reservations.data ?? []).slice(0, RESERVATION_PAGE_SIZE),
       staff: roster.data ?? [], hasMore: (reservations.data ?? []).length > RESERVATION_PAGE_SIZE,
@@ -103,10 +108,13 @@ export async function POST(request: NextRequest) {
         (body.note !== undefined && (typeof body.note !== "string" || body.note.length > 2000))) {
       return NextResponse.json({ error: "入力内容を確認してください。" }, { status: 400 });
     }
+    const email = parseCustomerEmail(body.customerEmail);
+    if (email === undefined) return NextResponse.json({ error: "メールアドレスを確認してください。" }, { status: 400 });
     if (Date.parse(body.startAt) % TIME_STEP_MS !== 0) {
       return NextResponse.json({ error: "開始時間は15分刻みの空き枠から選択してください。" }, { status: 400 });
     }
-    const { data, error } = await supabaseServer().rpc("create_reservation_atomic", { p_store_id: staff.storeId, p_service_id: body.serviceId, p_staff_id: body.staffId, p_start_at: body.startAt, p_customer_name: body.customerName.trim(), p_customer_phone: body.customerPhone.trim(), p_source: body.source, p_note: body.note ?? null });
+    const { data, error } = await supabaseServer().rpc(email ? "create_reservation_with_email_atomic" : "create_reservation_atomic", { ...(email ? { p_customer_email: email } : {}), p_store_id: staff.storeId, p_service_id: body.serviceId, p_staff_id: body.staffId, p_start_at: body.startAt, p_customer_name: body.customerName.trim(), p_customer_phone: body.customerPhone.trim(), p_source: body.source, p_note: body.note ?? null });
+    if (email && error?.code === "PGRST202") return NextResponse.json({ error: "メール連絡先の保存準備中です。時間をおいて再度お試しください。" }, { status: 503 });
     if (error) return NextResponse.json({ error: error.message.includes("outside_business_hours") ? "営業時間内の枠を指定してください。" : "指定した枠は予約できません。" }, { status: 409 });
     return NextResponse.json({ reservation: data }, { status: 201 });
   } catch { return NextResponse.json({ error: "予約を登録できませんでした。" }, { status: 500 }); }

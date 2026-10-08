@@ -4,6 +4,12 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 
 ## 起動
 
+### メール連絡先
+
+`supabase/migrations/0010_reservation_email.sql` を0009の後に適用する。Web予約と手動予約に任意のメールアドレスを追加し、予約ごとに保存する。予約詳細の「メールを作成」は端末のメールアプリを開く。自動メール・SMS・LINE通知は未設定であり、送信サービスの選定と設定が別途必要。既存の予約にメールアドレスは補完しない。
+
+メール付きの予約は新しいDB関数で予約作成と連絡先保存を一つのトランザクションで行う。SQL適用前もメールなしの予約と一覧表示は継続するが、メール付きの予約は保存準備中として失敗する（メールを捨てて予約だけ作成することはしない）。
+
 1. `.env.example` を `.env.local` にコピーし、Supabase Project URL、anon key、**server 専用** service-role key を設定する。
 2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、`supabase/migrations/0002_validate_reservation_schedule.sql`、`supabase/migrations/0003_grant_service_role_table_access.sql`、`supabase/migrations/0004_reschedule_reservation_atomic.sql`、`supabase/migrations/0005_store_settings_atomic.sql`、`supabase/migrations/0006_manage_availability_blocks.sql`、`supabase/migrations/0007_fifteen_minute_grid.sql`、続いて `supabase/seed.sql` を順に実行する。
 3. `npm install`、`npm run dev` を実行して `http://localhost:3000` を開く。
