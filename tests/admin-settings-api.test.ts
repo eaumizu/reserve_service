@@ -1,3 +1,4 @@
+vi.mock("../lib/booking-rules-server", () => ({ readBookingRules: async () => ({ advance_days: 30, cutoff_minutes: 60 }) }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const { authorizeStaff, supabaseServer, from, rpc } = vi.hoisted(() => ({ authorizeStaff: vi.fn(), supabaseServer: vi.fn(), from: vi.fn(), rpc: vi.fn() }));
@@ -9,6 +10,13 @@ const request = (data = { kind: "store", data: { name: "新店舗" } }) => new N
 });
 beforeEach(() => { vi.resetAllMocks(); supabaseServer.mockReturnValue({ from, rpc }); });
 describe("admin-only store settings", () => {
+  it("saves booking rules only for the verified admin store", async () => {
+    authorizeStaff.mockResolvedValue({ role: "admin", storeId: "verified-store" });
+    rpc.mockResolvedValue({ data: { id: "verified-store" }, error: null });
+    const response = await POST(new NextRequest("http://localhost/api/admin/settings", { method: "POST", body: JSON.stringify({ kind: "booking_rules", storeId: "other", data: { advance_days: 14, cutoff_minutes: 45 } }) }));
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith("save_booking_rules_atomic", { p_store_id: "verified-store", p_advance_days: 14, p_cutoff_minutes: 45 });
+  });
   it("rejects unauthenticated reads and writes", async () => {
     authorizeStaff.mockResolvedValue(null);
     expect((await GET(new NextRequest("http://localhost/api/admin/settings"))).status).toBe(401);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authorizeStaff } from "../../../../lib/admin-auth";
 import { supabaseServer } from "../../../../lib/supabase-server";
 import { parseSettingsChange } from "../../../../lib/store-settings";
+import { readBookingRules } from "../../../../lib/booking-rules-server";
 
 const headers = { "Cache-Control": "private, no-store" };
 export async function GET(request: NextRequest) {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
       db.from("business_hours").select("weekday,start_time,end_time").eq("store_id", user.storeId).order("weekday").order("start_time"),
     ]);
     if (store.error || services.error || staff.error || links.error || hours.error) throw new Error("Settings read failed");
-    return NextResponse.json({ store: store.data, services: services.data, staff: staff.data,
+    return NextResponse.json({ store: store.data, bookingRules: await readBookingRules(user.storeId), services: services.data, staff: staff.data,
       links: (links.data ?? []).map(link => ({ staff_id: link.staff_id, service_id: link.service_id })),
       hours: (hours.data ?? []).map(hour => ({ ...hour, start_time: hour.start_time.slice(0, 5), end_time: hour.end_time.slice(0, 5) })) }, { headers });
   } catch { return NextResponse.json({ error: "店舗設定を取得できませんでした。" }, { status: 503, headers }); }
@@ -34,7 +35,9 @@ export async function POST(request: NextRequest) {
     try { body = await request.json(); } catch { return NextResponse.json({ error: "入力内容を確認してください。" }, { status: 400, headers }); }
     const change = parseSettingsChange(body);
     if (!change) return NextResponse.json({ error: "入力内容を確認してください。名前・金額・施術時間・営業時間に不正な値があります。" }, { status: 400, headers });
-    const { data, error } = await supabaseServer().rpc("save_store_settings_atomic", {
+    const { data, error } = change.kind === "booking_rules" ? await supabaseServer().rpc("save_booking_rules_atomic", {
+      p_store_id: user.storeId, p_advance_days: change.data.advance_days, p_cutoff_minutes: change.data.cutoff_minutes,
+    }) : await supabaseServer().rpc("save_store_settings_atomic", {
       p_store_id: user.storeId, p_kind: change.kind, p_data: change.data,
     });
     if (error) {

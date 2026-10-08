@@ -1,6 +1,7 @@
 "use client";
 
 import { CLOCK_TIMES, DURATION_OPTIONS } from "../lib/reservations/time-grid";
+import { DEFAULT_BOOKING_RULES, type BookingRules } from "../lib/booking-rules";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -24,6 +25,21 @@ function StoreNameEditor({ name, save }: { name: string; save: Save }) {
   return <form className="card" onSubmit={e => { e.preventDefault(); void save({ kind: "store", data: { name: value } }); }}>
     <h2>店舗名</h2><label>予約サイトに表示する店舗名<input required maxLength={100} value={value} onChange={e => setValue(e.target.value)} /></label>
     <button type="submit" className="primary">店舗名を保存</button>
+  </form>;
+}
+
+function BookingRulesEditor({ rules, save }: { rules: BookingRules; save: Save }) {
+  const [days, setDays] = useState(rules.advance_days);
+  const [minutes, setMinutes] = useState(rules.cutoff_minutes);
+  return <form className="card" onSubmit={e => { e.preventDefault(); void save({ kind: "booking_rules", data: { advance_days: days, cutoff_minutes: minutes } }); }}>
+    <h2>予約受付ルール</h2>
+    <label>何日先まで予約できるか<input type="number" min={0} max={365} step={1} required value={days} onChange={e => setDays(e.target.valueAsNumber)} /></label>
+    <p className="muted">日本時間で今日から指定日数後まで受付します。0日は当日のみです。</p>
+    <label>施術開始の何分前に締め切るか<select value={minutes} onChange={e => setMinutes(Number(e.target.value))}>
+      {[0, ...DURATION_OPTIONS].map(value => <option key={value} value={value}>{value}分前{value === 0 && "（開始直前まで）"}</option>)}
+    </select></label>
+    <p className="muted">Web予約に適用します。手動予約にはこの期限を適用しません。既存予約は変更されません。</p>
+    <button type="submit" className="primary">予約受付ルールを保存</button>
   </form>;
 }
 
@@ -177,6 +193,7 @@ export function AdminStoreSettings({ auth, onBusy }: { auth: SupabaseClient; onB
     <button type="button" disabled={busy || loading} onClick={reload}>設定を再読み込み（未保存の入力は戻ります）</button>
     {loading ? <p>設定を読み込み中…</p> : settings && <fieldset disabled={busy} key={editorVersion} style={{ border: 0, padding: 0, margin: 0 }}>
       <StoreNameEditor name={settings.store.name} save={save} />
+      <BookingRulesEditor rules={settings.bookingRules ?? DEFAULT_BOOKING_RULES} save={save} />
       <h2>メニュー</h2>
       <p className="muted">予約履歴があるメニューの施術時間・準備時間は変更できません。時間を変える場合は新しいメニューを追加してください。受付を停止しても予約履歴は残ります。</p>
       {settings.services.map(service => <ServiceEditor key={service.id} service={service} save={save} />)}

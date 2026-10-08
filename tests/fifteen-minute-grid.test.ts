@@ -1,3 +1,4 @@
+vi.mock("../lib/booking-rules-server", () => ({ readBookingRules: async () => ({ advance_days: 30, cutoff_minutes: 60 }) }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { findAvailableStarts } from "../lib/reservations/availability";
@@ -5,7 +6,7 @@ import { CLOCK_TIMES, isGridTimestamp } from "../lib/reservations/time-grid";
 const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
 vi.mock("../lib/supabase-server", () => ({ supabaseServer: () => ({ rpc }) }));
 import { POST } from "../app/api/reservations/route";
-beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("NEXT_PUBLIC_DEFAULT_STORE_ID", "store"); });
+beforeEach(() => { vi.resetAllMocks(); vi.spyOn(Date, "now").mockReturnValue(Date.parse("2029-12-31T00:00:00Z")); vi.stubEnv("NEXT_PUBLIC_DEFAULT_STORE_ID", "store"); });
 describe("quarter-hour booking end to end boundaries", () => {
   it("offers 10:15 after a 9:00 one-hour treatment with 15-minute cleanup", () => {
     const date = (time: string) => new Date(`2030-01-01T${time}:00+09:00`);

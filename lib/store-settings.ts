@@ -1,4 +1,5 @@
 import { CLOCK_TIME_PATTERN } from "./reservations/time-grid";
+import { validBookingRules, type BookingRules } from "./booking-rules";
 export type SettingsService = {
   id: string; name: string; duration_minutes: number; buffer_before: number;
   buffer_after: number; price: number; active: boolean; online_bookable: boolean;
@@ -7,6 +8,7 @@ export type SettingsStaff = { id: string; name: string; active: boolean };
 export type SettingsHour = { weekday: number; start_time: string; end_time: string };
 export type StoreSettings = {
   store: { id: string; name: string; timezone: string };
+  bookingRules?: BookingRules;
   services: SettingsService[]; staff: SettingsStaff[];
   links: { staff_id: string; service_id: string }[]; hours: SettingsHour[];
 };
@@ -14,6 +16,7 @@ type ServiceEdit = Omit<SettingsService, "id"> & { id?: string };
 type StaffEdit = Omit<SettingsStaff, "id"> & { id?: string; serviceIds: string[] };
 export type SettingsChange =
   | { kind: "store"; data: { name: string } }
+  | { kind: "booking_rules"; data: BookingRules }
   | { kind: "service"; data: ServiceEdit }
   | { kind: "staff"; data: StaffEdit }
   | { kind: "hours"; data: { hours: SettingsHour[] } };
@@ -28,6 +31,7 @@ const object = (value: unknown): value is Record<string, unknown> => !!value && 
 export function parseSettingsChange(value: unknown): SettingsChange | null {
   if (!object(value) || !object(value.data)) return null;
   const data = value.data;
+  if (value.kind === "booking_rules") return validBookingRules(data) ? { kind: "booking_rules", data: { advance_days: data.advance_days, cutoff_minutes: data.cutoff_minutes } } : null;
   if (value.kind === "store") return validName(data.name) ? { kind: "store", data: { name: data.name.trim() } } : null;
   if (value.kind === "service") {
     if (!validName(data.name) || (data.id !== undefined && (typeof data.id !== "string" || !uuid.test(data.id))) ||
