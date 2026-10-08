@@ -3,7 +3,7 @@ import { authorizeStaff } from "../../../../lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "../../../../lib/supabase-server";
 import type { ReservationInput } from "@/lib/reservations/types";
-import { parseReservationListFilters, RESERVATION_PAGE_SIZE } from "../../../../lib/reservations/list-filters";
+import { literalSearchPattern, parseReservationListFilters, RESERVATION_PAGE_SIZE } from "../../../../lib/reservations/list-filters";
 
 export async function GET(request: NextRequest) {
   const headers = { "Cache-Control": "private, no-store" };
@@ -14,10 +14,12 @@ export async function GET(request: NextRequest) {
     if (!filters) return NextResponse.json({ error: "日付・スタッフ・表示ページを確認してください。" }, { status: 400, headers });
     const db = supabaseServer();
     let query = db.from("reservations")
-      .select("id,service_id,staff_id,start_at,end_at,updated_at,status,source,note,customers(name,phone),services(name,buffer_after),staff(name)")
+      .select(`id,service_id,staff_id,start_at,end_at,updated_at,status,source,note,customers${filters.search ? "!inner" : ""}(name,phone),services(name,buffer_after),staff(name)`)
       .eq("store_id", staff.storeId);
     if (filters.start && filters.end) query = query.gte("start_at", filters.start).lt("start_at", filters.end);
     if (filters.staffId) query = query.eq("staff_id", filters.staffId);
+    if (filters.status) query = query.eq("status", filters.status);
+    if (filters.search) query = query.ilike(`customers.${filters.searchBy}`, literalSearchPattern(filters.search));
     const offset = filters.page * RESERVATION_PAGE_SIZE;
     const [reservations, roster] = await Promise.all([
       query.order("start_at", { ascending: true }).order("id", { ascending: true }).range(offset, offset + RESERVATION_PAGE_SIZE),
