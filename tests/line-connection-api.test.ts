@@ -1,0 +1,17 @@
+import {beforeEach,afterEach,expect,it,vi} from "vitest";
+import {NextRequest} from "next/server";
+const {authorize,query}=vi.hoisted(()=>({authorize:vi.fn(),query:{select:vi.fn(),eq:vi.fn(),maybeSingle:vi.fn()}}));
+vi.mock("../lib/admin-auth",()=>({authorizeStaff:authorize}));
+vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({from:()=>query})}));
+import {POST} from "../app/api/admin/line-settings/check/route";
+import {encryptLineCredential} from "../lib/line-settings-secret";
+const fetchMock=vi.fn();
+const request=()=>new NextRequest("http://localhost/api/admin/line-settings/check",{method:"POST",headers:{Authorization:"Bearer test"},body:JSON.stringify({storeId:"other"})});
+beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("LINE_SETTINGS_ENCRYPTION_KEY","b".repeat(64));vi.stubGlobal("fetch",fetchMock);authorize.mockResolvedValue({role:"admin",storeId:"trusted"});query.select.mockReturnValue(query);query.eq.mockReturnValue(query);query.maybeSingle.mockResolvedValue({data:{access_token_cipher:encryptLineCredential("trusted","private-token")},error:null});fetchMock.mockResolvedValue(new Response(JSON.stringify({displayName:"店舗",basicId:"@basic",premiumId:"@shop",userId:"private-id"}),{status:200}));});
+afterEach(()=>vi.unstubAllGlobals());
+it("requires an administrator before reading credentials",async()=>{authorize.mockResolvedValue(null);expect((await POST(request())).status).toBe(401);authorize.mockResolvedValue({role:"staff",storeId:"trusted"});expect((await POST(request())).status).toBe(403);expect(query.select).not.toHaveBeenCalled();expect(fetchMock).not.toHaveBeenCalled();});
+it("uses trusted tenant and returns only account metadata",async()=>{const r=await POST(request());expect(r.status).toBe(200);expect(query.eq).toHaveBeenCalledWith("store_id","trusted");expect(fetchMock).toHaveBeenCalledWith("https://api.line.me/v2/bot/info",expect.objectContaining({headers:{Authorization:"Bearer private-token"},redirect:"error"}));const body=await r.text();expect(body).toContain("@shop");expect(body).not.toContain("private");expect(r.headers.get("cache-control")).toBe("private, no-store");});
+it("requires saved credentials",async()=>{query.maybeSingle.mockResolvedValue({data:null,error:null});expect((await POST(request())).status).toBe(400);expect(fetchMock).not.toHaveBeenCalled();});
+it("fails closed when decryption fails",async()=>{vi.stubEnv("LINE_SETTINGS_ENCRYPTION_KEY","c".repeat(64));expect((await POST(request())).status).toBe(503);expect(fetchMock).not.toHaveBeenCalled();});
+it("handles invalid token without echoing LINE errors",async()=>{fetchMock.mockResolvedValue(new Response("private-token",{status:401}));const r=await POST(request());expect(r.status).toBe(400);expect(await r.text()).not.toContain("private-token");});
+it("handles timeout and rate limits without internal details",async()=>{fetchMock.mockRejectedValue(new Error("private-token"));expect((await POST(request())).status).toBe(503);fetchMock.mockResolvedValue(new Response("private-token",{status:429}));expect((await POST(request())).status).toBe(503);});
