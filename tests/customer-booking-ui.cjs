@@ -16,7 +16,23 @@ const {chromium}=require("playwright");const assert=require("node:assert/strict"
       }
       await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(data)});
     });
+    let lineLinked=false,lineIssues=0;
+    await page.route("**/api/customer-booking/line",async route=>{
+      const body=route.request().postDataJSON();
+      const data=body.action==="status"?{linked:lineLinked,available:true}:
+        {message:"予約連携 "+"b".repeat(32),friendUrl:"https://line.me/R/ti/p/@shop",chatUrl:"http://localhost:3000/reservation#"+token+"-line",expiresInMinutes:10};
+      if(body.action==="issue")lineIssues++;
+      await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(data)});
+    });
     await page.goto("http://localhost:3000/reservation#"+token);
+    await page.getByRole("button",{name:"LINEを開いて予約を連携",exact:true}).click();
+    await page.getByText("友だち追加はできましたか？",{exact:false}).waitFor();
+    await page.getByRole("button",{name:"トークを開いて連携を完了",exact:true}).click();
+    assert.equal(lineIssues,1,"resuming must keep the valid linking code");
+    lineLinked=true;await page.evaluate(()=>window.dispatchEvent(new Event("focus")));
+    await page.getByRole("status").filter({hasText:"この予約はLINEと連携済み"}).waitFor();
+    assert.equal(await page.getByRole("button",{name:"トークを開いて連携を完了",exact:true}).count(),0);
+    await page.evaluate(token=>history.replaceState(null,"","/reservation#"+token),token);
     await page.getByRole("button",{name:"予約日時を変更",exact:true}).click();
     await page.getByLabel("変更先の予約日").fill("2030-01-02");
     await page.getByRole("button",{name:/10:15/}).click();
