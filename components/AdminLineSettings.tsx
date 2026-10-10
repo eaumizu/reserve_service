@@ -1,11 +1,13 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from "react";
 import type {SupabaseClient} from "@supabase/supabase-js";
-type Settings={accountName:string;friendUrl:string;channelId:string;hasAccessToken:boolean;hasChannelSecret:boolean;version:string|null;encryptionReady:boolean};
+type Settings={storeId?:string;accountName:string;friendUrl:string;channelId:string;hasAccessToken:boolean;hasChannelSecret:boolean;version:string|null;encryptionReady:boolean};
 export function AdminLineSettings({auth,onBusy}:{auth:SupabaseClient;onBusy:(busy:boolean)=>void}){
   const [settings,setSettings]=useState<Settings>(),[accessToken,setAccessToken]=useState(""),[channelSecret,setChannelSecret]=useState("");
   const [clear,setClear]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[success,setSuccess]=useState("");
   const [connection,setConnection]=useState<{displayName:string;basicId:string;premiumId:string|null}>();
+  const [origin,setOrigin]=useState("");
+  useEffect(()=>setOrigin(window.location.origin),[]);
   const inFlight=useRef(false);
   const request=useCallback(async (init?:RequestInit,path="/api/admin/line-settings")=>{
     const {data:{session}}=await auth.auth.getSession();if(!session){await auth.auth.signOut();throw new Error("再度ログインしてください。");}
@@ -34,12 +36,13 @@ export function AdminLineSettings({auth,onBusy}:{auth:SupabaseClient;onBusy:(bus
     finally{setBusy(false);onBusy(false);inFlight.current=false;}}
   return <section className="card" aria-label="店舗のLINE連携設定"><h2>店舗のLINE連携設定</h2>
     <p>この店舗の公式アカウントを登録できます。保存済みの秘密情報は表示しません。</p>
-    <p>設定の保存と公式アカウントへの接続確認に対応しています。LINEでの通知・本人の予約との紐づけ・LINEからの操作は、公式アカウントでの接続確認後に追加します。Webの予約操作はLINE登録なしで利用できます。</p>
+    <p>設定の保存・接続確認と、お客様の予約確認ページからの連携コード発行に対応しています。Webhook URLをLINE Developersへ登録し、Webhookの利用を有効にしてください。自動通知は今後追加します。Webの予約操作はLINE登録なしで利用できます。</p>
     {error&&<p className="error" role="alert">{error}</p>}{success&&<p role="status">{success}</p>}
     <button disabled={busy} onClick={reload}>LINE設定を再読み込み（未保存の入力は戻ります）</button>
     {settings&&<><p>接続確認は保存済みのアクセストークンを使います。メッセージは送信しません。表示されたアカウント名・IDが店舗のものか確認してください。チャネルシークレットの検証は含みません。</p>
       <button disabled={busy||!settings.hasAccessToken||!settings.encryptionReady} onClick={()=>void check()}>LINEの接続確認</button>
       {connection&&<p role="status">接続できました：{connection.displayName}（{connection.premiumId??connection.basicId}）。自動通知はまだ有効になっていません。</p>}</>}
+    {settings?.storeId&&origin&&<label>LINE Developersに登録するWebhook URL<input readOnly value={`${origin}/api/line/webhook/${settings.storeId}`} onFocus={e=>e.target.select()}/></label>}
     {settings&&<form onSubmit={e=>{e.preventDefault();void save();}}><fieldset disabled={busy} style={{border:0,padding:0}}>
       <label>公式アカウント名<input maxLength={100} value={settings.accountName} onChange={e=>setSettings({...settings,accountName:e.target.value})}/></label>
       <label>友だち追加URL<input type="url" maxLength={500} placeholder="https://lin.ee/…" value={settings.friendUrl} onChange={e=>setSettings({...settings,friendUrl:e.target.value})}/></label>

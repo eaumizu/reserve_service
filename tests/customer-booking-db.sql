@@ -31,6 +31,17 @@ begin
     perform manage_customer_booking_atomic(repeat('a',64),'cancel',original.updated_at,null);
     raise exception 'expected stale version failure';
   exception when others then if sqlerrm<>'booking_changed' then raise; end if; end;
+  perform issue_customer_line_code(repeat('a',64),repeat('e',64));
+  perform issue_customer_line_code(repeat('a',64),repeat('f',64));
+  if consume_customer_line_code(store,repeat('e',64),'U'||repeat('a',32)) then raise exception 'old code accepted'; end if;
+  if consume_customer_line_code('99999999-9999-9999-9999-999999999999',repeat('f',64),'U'||repeat('a',32)) then raise exception 'cross store code accepted'; end if;
+  update customer_line_link_codes set expires_at=clock_timestamp()-interval '1 second';
+  if consume_customer_line_code(store,repeat('f',64),'U'||repeat('a',32)) then raise exception 'expired code accepted'; end if;
+  perform issue_customer_line_code(repeat('a',64),repeat('f',64));
+  if not consume_customer_line_code(store,repeat('f',64),'U'||repeat('a',32)) then raise exception 'valid code rejected'; end if;
+  if consume_customer_line_code(store,repeat('f',64),'U'||repeat('b',32)) then raise exception 'used code accepted'; end if;
+  if not exists(select 1 from customer_line_links where reservation_id=original.id and line_user_id='U'||repeat('a',32)) then raise exception 'link missing'; end if;
+  if has_function_privilege('anon','consume_customer_line_code(uuid,text,text)','execute') or has_table_privilege('authenticated','customer_line_links','select') then raise exception 'LINE privileges leaked'; end if;
   result:=manage_customer_booking_atomic(repeat('a',64),'cancel',version,null);
   if result->>'status'<>'cancelled' or (result->>'canManage')::boolean then raise exception 'cancellation did not change state'; end if;
   perform issue_customer_booking_access(store,original.id,repeat('b',64));

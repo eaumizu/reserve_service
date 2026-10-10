@@ -11,7 +11,7 @@ export async function GET(request:NextRequest){
     if(!user)return respond({error:"ログインが必要です。"},401);if(user.role!=="admin")return respond({error:"管理者のみ設定できます。"},403);
     const result=await supabaseServer().from("store_line_settings").select("account_name,friend_url,channel_id,access_token_cipher,channel_secret_cipher,version,updated_at").eq("store_id",user.storeId).maybeSingle();
     if(result.error)throw result.error;const row=result.data;
-    return respond({accountName:row?.account_name??"",friendUrl:row?.friend_url??"",channelId:row?.channel_id??"",
+    return respond({storeId:user.storeId,accountName:row?.account_name??"",friendUrl:row?.friend_url??"",channelId:row?.channel_id??"",
       hasAccessToken:!!row?.access_token_cipher,hasChannelSecret:!!row?.channel_secret_cipher,version:row?.version??null,
       updatedAt:row?.updated_at??null,encryptionReady:lineEncryptionReady(),messagingActive:false});
   }catch{return respond({error:"LINE設定を取得できませんでした。追加SQLの適用をご確認ください。"},503);}
@@ -32,6 +32,6 @@ export async function POST(request:NextRequest){
       if(result.error.code==="23505")return respond({error:"このLINEチャネルは別の店舗で使用されています。"},409);
       throw result.error;
     }
-    return respond({...result.data,encryptionReady:lineEncryptionReady(),messagingActive:false});
+    return respond({...result.data,storeId:user.storeId,encryptionReady:lineEncryptionReady(),messagingActive:false});
   }catch{return respond({error:"LINE設定を保存できませんでした。再読み込みして結果をご確認ください。"},503);}
 }
