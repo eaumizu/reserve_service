@@ -6,6 +6,7 @@ import { AdminBookingForm } from "./AdminBookingForm";
 import { AdminRescheduleForm } from "./AdminRescheduleForm";
 import { AdminStoreSettings } from "./AdminStoreSettings";
 import { AdminAvailabilityBlocks } from "./AdminAvailabilityBlocks";
+import { CustomerLinkIssuer } from "./CustomerLinkIssuer";
 import { StaffNoteEditor } from "./StaffNoteEditor";
 import { canRecordOutcome, type ReservationOutcome } from "../lib/reservations/outcome";
 import type { AdminReservation as Reservation } from "../lib/reservations/types";
@@ -239,6 +240,7 @@ export function AdminReservations() {
           <dt>予約時の備考</dt><dd className="reservation-note">{detailTarget.note?.trim() || "記載なし"}</dd>
           <dt>最終更新</dt><dd>{new Date(detailTarget.updated_at).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}</dd>
         </dl>
+        <CustomerLinkIssuer key={`link-${detailTarget.id}`} auth={auth} reservationId={detailTarget.id} onBusy={setBusy} />
         <StaffNoteEditor key={detailTarget.id} auth={auth} reservationId={detailTarget.id} onBusy={setBusy} />
       </dialog>}
       {statusTarget && <section ref={confirmationRef} tabIndex={-1} className="card reservation-confirmation" aria-label="予約状態の更新確認">

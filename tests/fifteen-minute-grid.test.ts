@@ -20,7 +20,7 @@ describe("quarter-hour booking end to end boundaries", () => {
     rpc.mockResolvedValue({ data: { id: "reservation" }, error: null });
     const response = await POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ source: "web", storeId: "store", serviceId: "service", staffId: "staff", customerName: "確認", customerPhone: "000", startAt }) }));
     expect(response.status).toBe(201);
-    expect(rpc).toHaveBeenCalledWith("create_reservation_atomic", expect.objectContaining({ p_start_at: startAt }));
+    expect(rpc).toHaveBeenCalledWith("create_customer_booking_atomic", expect.objectContaining({ p_start_at: startAt }));
   });
   it.each(["2030-01-01T10:10:00+09:00", "2030-01-01T10:15:01+09:00", "2030-01-01T10:15:00", "invalid"])("rejects invalid public starts %s", async startAt => {
     expect(isGridTimestamp(startAt)).toBe(false);

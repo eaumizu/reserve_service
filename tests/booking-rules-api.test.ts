@@ -15,10 +15,22 @@ beforeEach(() => {
 });
 const post = (startAt = payload.startAt) => POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ ...payload, startAt }) }));
 describe("public booking rules API", () => {
+  it("returns a private bearer link while storing only its hash", async () => {
+    const response=await post();const result=await response.json();
+    expect(response.status).toBe(201);expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(result.managePath).toMatch(/^\/reservation#[a-f0-9]{64}$/);
+    const call=rpc.mock.calls[0][1];expect(call.p_token_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.managePath).not.toContain(call.p_token_hash);
+  });
+  it("falls back only when the new RPC is missing, without returning a false link", async () => {
+    rpc.mockResolvedValueOnce({data:null,error:{code:"PGRST202"}}).mockResolvedValueOnce({data:{id:"legacy"},error:null});
+    const result=await post();expect(result.status).toBe(201);expect((await result.json()).managePath).toBeNull();
+    expect(rpc.mock.calls.map(call=>call[0])).toEqual(["create_customer_booking_atomic","create_reservation_atomic"]);
+  });
   it("saves optional email in the atomic booking call", async () => {
     const response = await POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ ...payload, customerEmail: " Test@example.com " }) }));
     expect(response.status).toBe(201);
-    expect(rpc).toHaveBeenCalledWith("create_reservation_with_email_atomic", expect.objectContaining({ p_customer_email: "Test@example.com", p_store_id: "trusted", p_source: "web" }));
+    expect(rpc).toHaveBeenCalledWith("create_customer_booking_atomic", expect.objectContaining({ p_customer_email: "Test@example.com", p_store_id: "trusted", p_source: "web" }));
   });
   it("rejects invalid email before creating a reservation", async () => {
     const response = await POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ ...payload, customerEmail: "bad" }) }));
@@ -28,7 +40,7 @@ describe("public booking rules API", () => {
     rpc.mockResolvedValue({ data: null, error: { code: "PGRST202", message: "private schema detail" } });
     const response = await POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ ...payload, customerEmail: "test@example.com" }) }));
     expect(response.status).toBe(503); expect(await response.text()).not.toContain("private schema detail");
-    expect(rpc).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledTimes(2);
   });
   it("rejects a slot that expired after display without creating records", async () => {
     vi.spyOn(Date, "now").mockReturnValue(Date.parse("2030-01-01T10:00:01+09:00"));
