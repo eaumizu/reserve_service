@@ -1,0 +1,22 @@
+import {beforeEach,describe,expect,it,vi} from "vitest";
+import {NextRequest} from "next/server";
+const {authorize,rpc,query}=vi.hoisted(()=>({authorize:vi.fn(),rpc:vi.fn(),query:{select:vi.fn(),eq:vi.fn(),maybeSingle:vi.fn()}}));
+vi.mock("../lib/admin-auth",()=>({authorizeStaff:authorize}));
+vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({from:()=>query,rpc})}));
+import {GET,POST} from "../app/api/admin/line-settings/route";
+import {decryptLineCredential} from "../lib/line-settings-secret";
+const request=(body?:unknown)=>new NextRequest("http://localhost/api/admin/line-settings",{method:body===undefined?"GET":"POST",headers:{Authorization:"Bearer test"},...(body===undefined?{}:{body:JSON.stringify(body)})});
+const value={accountName:"店舗",friendUrl:"https://lin.ee/test",channelId:"1234567890",expectedVersion:null};
+beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("LINE_SETTINGS_ENCRYPTION_KEY","b".repeat(64));authorize.mockResolvedValue({role:"admin",storeId:"trusted"});
+query.select.mockReturnValue(query);query.eq.mockReturnValue(query);query.maybeSingle.mockResolvedValue({data:null,error:null});rpc.mockResolvedValue({data:{version:"saved"},error:null});});
+describe("tenant LINE settings API",()=>{
+  it("requires staff authentication",async()=>{authorize.mockResolvedValue(null);expect((await GET(request())).status).toBe(401);expect((await POST(request(value))).status).toBe(401);expect(rpc).not.toHaveBeenCalled();expect(query.select).not.toHaveBeenCalled();});
+  it("restricts configuration to admins",async()=>{authorize.mockResolvedValue({role:"staff",storeId:"trusted"});expect((await GET(request())).status).toBe(403);expect((await POST(request(value))).status).toBe(403);expect(rpc).not.toHaveBeenCalled();});
+  it("returns flags rather than stored ciphertext or credentials",async()=>{query.maybeSingle.mockResolvedValue({data:{account_name:"店舗",access_token_cipher:"stored-private-cipher",channel_secret_cipher:"private-secret"},error:null});const response=await GET(request());const body=await response.json();expect(body.hasAccessToken).toBe(true);expect(body.hasChannelSecret).toBe(true);expect(body.messagingActive).toBe(false);expect(JSON.stringify(body)).not.toContain("private");expect(query.eq).toHaveBeenCalledWith("store_id","trusted");expect(response.headers.get("cache-control")).toBe("private, no-store");});
+  it("encrypts supplied keys for the verified tenant",async()=>{const response=await POST(request({...value,storeId:"other",accessToken:"access-secret",channelSecret:"channel-secret"}));expect(response.status).toBe(200);const input=rpc.mock.calls[0][1];expect(input.p_store_id).toBe("trusted");expect(decryptLineCredential("trusted",input.p_access_token_cipher)).toBe("access-secret");expect(()=>decryptLineCredential("other",input.p_access_token_cipher)).toThrow();expect(input.p_channel_secret_cipher).not.toContain("channel-secret");});
+  it("allows metadata without an encryption key but fails closed for credentials",async()=>{vi.stubEnv("LINE_SETTINGS_ENCRYPTION_KEY","");expect((await POST(request(value))).status).toBe(200);rpc.mockClear();expect((await POST(request({...value,accessToken:"secret"}))).status).toBe(503);expect(rpc).not.toHaveBeenCalled();});
+  it("keeps blank credential inputs unchanged and supports explicit clearing",async()=>{await POST(request({...value,accessToken:"",channelSecret:""}));expect(rpc.mock.calls[0][1]).toMatchObject({p_access_token_cipher:null,p_channel_secret_cipher:null,p_clear_credentials:false});await POST(request({...value,clearCredentials:true}));expect(rpc.mock.calls[1][1].p_clear_credentials).toBe(true);});
+  it("rejects unsafe URLs without writes",async()=>{expect((await POST(request({...value,friendUrl:"https://evil.test"}))).status).toBe(400);expect(rpc).not.toHaveBeenCalled();});
+  it("returns conflicts for stale settings and duplicate channels",async()=>{for(const error of [{message:"line_settings_changed"},{code:"23505",message:"private-index"}]){rpc.mockResolvedValue({data:null,error});expect((await POST(request(value))).status).toBe(409);}});
+  it("hides internal errors",async()=>{rpc.mockResolvedValue({data:null,error:{message:"private details"}});const response=await POST(request(value));expect(response.status).toBe(503);expect(await response.text()).not.toContain("private details");});
+});
