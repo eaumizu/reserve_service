@@ -1,20 +1,20 @@
 "use client";
-import {useEffect,useRef,useState} from "react";
+import {useCallback,useEffect,useRef,useState} from "react";
 import type {SupabaseClient} from "@supabase/supabase-js";
 type Settings={accountName:string;friendUrl:string;channelId:string;hasAccessToken:boolean;hasChannelSecret:boolean;version:string|null;encryptionReady:boolean};
 export function AdminLineSettings({auth,onBusy}:{auth:SupabaseClient;onBusy:(busy:boolean)=>void}){
   const [settings,setSettings]=useState<Settings>(),[accessToken,setAccessToken]=useState(""),[channelSecret,setChannelSecret]=useState("");
   const [clear,setClear]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[success,setSuccess]=useState("");
   const inFlight=useRef(false);
-  async function request(init?:RequestInit){
+  const request=useCallback(async (init?:RequestInit)=>{
     const {data:{session}}=await auth.auth.getSession();if(!session){await auth.auth.signOut();throw new Error("再度ログインしてください。");}
     const r=await fetch("/api/admin/line-settings",{...init,cache:"no-store",headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"}});
     const data=await r.json();if(!r.ok){if(r.status===401)await auth.auth.signOut();throw new Error(data.error);}return data;
-  }
+  },[auth]);
   useEffect(()=>{const controller=new AbortController();let active=true;
     request({signal:controller.signal}).then(data=>{if(active)setSettings(data);}).catch(e=>{if(active)setError(e instanceof Error?e.message:"設定を読み込めません。");});
     return()=>{active=false;controller.abort();};
-  },[auth]);
+  },[request]);
   async function save(){
     if(!settings||inFlight.current)return;inFlight.current=true;setBusy(true);onBusy(true);setError("");setSuccess("");
     try{setSettings(await request({method:"POST",body:JSON.stringify({accountName:settings.accountName,friendUrl:settings.friendUrl,
