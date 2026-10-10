@@ -6,6 +6,7 @@ type Service = { id: string; name: string; duration_minutes: number; price: numb
 type Slot = { staffId: string; staffName: string; startAt: string };
 type Rules = BookingRules & { minDate: string; maxDate: string };
 export function BookingFlow() {
+  const [managePath,setManagePath]=useState<string|null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [rules, setRules] = useState<Rules>();
   const [service, setService] = useState<Service>();
@@ -46,12 +47,12 @@ export function BookingFlow() {
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/reservations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ storeId: process.env.NEXT_PUBLIC_DEFAULT_STORE_ID, serviceId: service.id, staffId: slot.staffId, startAt: slot.startAt, customerName: name, customerPhone: phone, customerEmail: email.trim(), source: "web" }) });
-      if (response.ok) setStage("done");
+      if (response.ok) { const result=await response.json();setManagePath(result.managePath??null);setStage("done"); }
       else { setError((await response.json()).error); setStage("form"); setSlot(undefined); setSlots([]); }
     } catch { setError("通信エラーです。予約結果を店舗に確認してください。"); }
     finally { setBusy(false); }
   }
-  if (stage === "done") return <section className="card"><h2>ご予約を承りました</h2><p>確認のため、店舗からご連絡する場合があります。</p></section>;
+  if (stage === "done") return <section className="card"><h2>ご予約を承りました</h2><p>確認のため、店舗からご連絡する場合があります。</p>{managePath?<><p><a href={managePath}>予約を確認・変更・キャンセル</a></p><p>リンクを開いて保存してください。LINEを利用しなくても操作できます。このリンクは他の方に共有しないでください。</p></>:<p>変更・キャンセルは店舗にご連絡ください。</p>}</section>;
   return <section className="card">
     <h2>{stage === "confirm" ? "内容のご確認" : "ご予約"}</h2>
     {rules && <p className="muted">Web予約は日本時間で今日から{rules.advance_days}日先まで、施術開始の{rules.cutoff_minutes === 0 ? "直前" : `${rules.cutoff_minutes}分前`}まで受付します。</p>}

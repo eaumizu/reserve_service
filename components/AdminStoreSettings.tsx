@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminLineSettings } from "./AdminLineSettings";
 import { CLOCK_TIMES, DURATION_OPTIONS } from "../lib/reservations/time-grid";
 import { DEFAULT_BOOKING_RULES, type BookingRules } from "../lib/booking-rules";
 
@@ -191,6 +192,7 @@ export function AdminStoreSettings({ auth, onBusy }: { auth: SupabaseClient; onB
     {error && <p className="error" role="alert">{error}</p>}
     {success && <p role="status">{success}</p>}
     <button type="button" disabled={busy || loading} onClick={reload}>設定を再読み込み（未保存の入力は戻ります）</button>
+    <fieldset disabled={busy} style={{border:0,padding:0}}><AdminLineSettings auth={auth} onBusy={value=>{setBusy(value);onBusy(value);}} /></fieldset>
     {loading ? <p>設定を読み込み中…</p> : settings && <fieldset disabled={busy} key={editorVersion} style={{ border: 0, padding: 0, margin: 0 }}>
       <StoreNameEditor name={settings.store.name} save={save} />
       <BookingRulesEditor rules={settings.bookingRules ?? DEFAULT_BOOKING_RULES} save={save} />
