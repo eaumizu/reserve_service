@@ -1,6 +1,7 @@
 "use client";
 import { useEffect,useRef,useState } from "react";
 import type { CustomerBooking } from "../lib/customer-booking";
+import {CustomerLineLink} from "./CustomerLineLink";
 type Mode="view"|"change"|"cancel"|"confirmChange";
 const statuses:Record<string,string>={confirmed:"予約確定",cancelled:"キャンセル済み",completed:"施術完了",no_show:"無断キャンセル"};
 const japan=(value:string)=>new Date(value).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"});
@@ -64,6 +65,7 @@ export function CustomerBookingManager(){
         <div className="grid"><button disabled={busy} onClick={()=>setMode(mode==="cancel"?"view":"change")}>戻る</button>
         <button className="primary" disabled={busy} onClick={()=>void save(mode==="cancel"?"cancel":"reschedule")}>{busy?"処理中…":mode==="cancel"?"キャンセルを確定":"変更を確定"}</button></div>
       </>}
+      {booking.canManage&&<CustomerLineLink/>}
       <p className="muted">変更・キャンセルは施術開始前までです。変更先は店舗の予約受付期間・締め切りに従います。LINEを利用しなくても操作できます。</p>
     </>}
   </section>;
