@@ -58,3 +58,15 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0012_store_line_settings.sql
           psql -v ON_ERROR_STOP=1 -f supabase/seed.sql
           psql -v ON_ERROR_STOP=1 -f tests/customer-booking-db.sql
+      - name: Browser checks
+        run: |
+          npm install --no-save --no-audit --no-fund playwright
+          npx playwright install --with-deps chromium
+          npm run start -- --hostname 127.0.0.1 --port 3000 > /tmp/customer-app.log 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://localhost:3000/reservation > /dev/null; then break; fi
+            sleep 1
+          done
+          node tests/customer-booking-ui.cjs
