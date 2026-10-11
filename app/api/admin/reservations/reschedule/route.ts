@@ -1,5 +1,5 @@
-import {dispatchLineReservationEvents,LINE_EVENT_WARNING} from "../../../../../lib/line-reservation-events";
-export const maxDuration=30;
+import {dispatchReservationNotifications} from "../../../../../lib/email-booking-events";
+export const maxDuration=60;
 import { TIME_STEP_MS } from "../../../../../lib/reservations/time-grid";
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeStaff } from "../../../../../lib/admin-auth";
@@ -33,8 +33,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "選択した枠に変更できません。空き時間を更新して選び直してください。" }, { status: 409, headers });
       throw error;
     }
-    const notification=await dispatchLineReservationEvents(staff.storeId,data.id);
-    return NextResponse.json({ notificationWarning:notification.pending?LINE_EVENT_WARNING:null,reservation: { id: data.id, staffId: data.staff_id, startAt: data.start_at } }, { headers });
+    const notification=await dispatchReservationNotifications(staff.storeId,data.id);
+    return NextResponse.json({ notificationWarning:notification.pending?"予約の操作は完了しました。通知に未送信があります。店舗設定の再送操作で確認してください。":null,reservation: { id: data.id, staffId: data.staff_id, startAt: data.start_at } }, { headers });
   } catch {
     return NextResponse.json({ error: "変更結果を確認できませんでした。一覧を更新して予約状態を確認してください。" }, { status: 503, headers });
   }

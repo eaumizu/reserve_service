@@ -64,4 +64,4 @@ describe("atomic reservation changes", () => {
   });
 });
 
-it("keeps a staff reschedule successful and surfaces pending LINE delivery",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});supabaseServer.mockReturnValue({rpc});rpc.mockResolvedValue({data:{id:input.reservationId,staff_id:input.staffId,start_at:input.startAt},error:null});notify.mockResolvedValue({pending:true});const r=await request(input);expect(r.status).toBe(200);expect((await r.json()).notificationWarning).toBe("pending");expect(notify).toHaveBeenCalledWith("trusted",input.reservationId);});
+it("keeps a staff reschedule successful and surfaces pending LINE delivery",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});supabaseServer.mockReturnValue({rpc});rpc.mockResolvedValue({data:{id:input.reservationId,staff_id:input.staffId,start_at:input.startAt},error:null});notify.mockResolvedValue({pending:true});const r=await request(input);expect(r.status).toBe(200);expect((await r.json()).notificationWarning).toContain("通知に未送信");expect(notify).toHaveBeenCalledWith("trusted",input.reservationId);});

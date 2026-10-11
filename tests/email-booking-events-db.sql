@@ -1,0 +1,45 @@
+begin;
+do $test$
+declare s uuid:='11111111-1111-1111-1111-111111111111';st uuid:='77777777-7777-7777-7777-777777777777';
+ sv uuid:='44444444-4444-4444-4444-444444444444';a reservations; j jsonb;k jsonb;
+ t timestamptz:=((clock_timestamp() at time zone 'Asia/Tokyo')::date+2+time '13:00') at time zone 'Asia/Tokyo';
+begin
+ insert into store_email_settings(store_id,sender_name,sender_email,domain,domain_id,status) values(s,'店舗','booking@example.com','example.com','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','verified');
+ insert into staff(id,store_id,name) values(st,s,'メール通知');insert into staff_services values(st,sv);
+ a:=create_customer_booking_atomic(s,sv,st,t,'メール予約','09000000041','phone',null,'test@example.com',repeat('a',64),'encrypted-token');
+ if (select count(*) from email_booking_events where reservation_id=a.id)<>1 then raise exception 'missing created event';end if;
+ if claim_email_booking_event('99999999-9999-9999-9999-999999999999',a.id) is not null then raise exception 'cross tenant claim';end if;
+ j:=claim_email_booking_event(s,a.id);
+ if j->>'kind'<>'created' or j->'payload'->>'tokenCipher'<>'encrypted-token' then raise exception 'initial link missing';end if;
+ if claim_email_booking_event(s,a.id) is not null then raise exception 'duplicate claim';end if;
+ perform finish_email_booking_event(s,(j->>'id')::uuid,gen_random_uuid(),true);
+ if (select state from email_booking_events where id=(j->>'id')::uuid)<>'sending' then raise exception 'stale lease wrote';end if;
+ perform finish_email_booking_event(s,(j->>'id')::uuid,(j->>'leaseId')::uuid,false);
+ update email_booking_events set lease_until=clock_timestamp()-interval '1 second' where id=(j->>'id')::uuid;
+ k:=claim_email_booking_event(s,a.id);if k->>'id'<>j->>'id' then raise exception 'retry key changed';end if;
+ perform finish_email_booking_event(s,(k->>'id')::uuid,(k->>'leaseId')::uuid,true);
+ if (select payload ? 'tokenCipher' from email_booking_events where id=(j->>'id')::uuid) then raise exception 'sent ciphertext retained';end if;
+ update reservations set note='private' where id=a.id;
+ if (select count(*) from email_booking_events where reservation_id=a.id)<>1 then raise exception 'notes sent';end if;
+ update reservations set start_at=start_at+interval '15 minutes',end_at=end_at+interval '15 minutes' where id=a.id;
+ j:=claim_email_booking_event(s,a.id);
+ if j->>'kind'<>'changed' or j->'payload'->>'tokenCipher'<>'encrypted-token' or j->'payload'->>'oldStartAt' is null then raise exception 'change notification wrong';end if;
+ perform finish_email_booking_event(s,(j->>'id')::uuid,(j->>'leaseId')::uuid,true);
+ update reservations set status='cancelled' where id=a.id;
+ j:=claim_email_booking_event(s,a.id);if j->>'kind'<>'cancelled' then raise exception 'cancel missing';end if;
+ perform finish_email_booking_event(s,(j->>'id')::uuid,(j->>'leaseId')::uuid,true);
+ if jsonb_array_length(email_booking_event_summary(s)->'rows')<>3 then raise exception 'summary missing';end if;
+ if jsonb_array_length(email_booking_event_summary('99999999-9999-9999-9999-999999999999')->'rows')<>0 then raise exception 'summary tenant leak';end if;
+ -- LINE-linked changes must not create mail; a failed reservation transaction must not leave an event.
+ a:=create_customer_booking_atomic(s,sv,st,t+interval '90 minutes','LINE予約','09000000042','phone',null,'line@example.com',repeat('b',64),'cipher-b');
+ insert into customer_line_links(reservation_id,store_id,line_user_id) values(a.id,s,'U'||repeat('c',32));
+ update reservations set status='cancelled' where id=a.id;
+ if exists(select 1 from email_booking_events where reservation_id=a.id and kind='cancelled') then raise exception 'LINE and email duplicate';end if;
+ if claim_email_booking_event(s,a.id) is not null then raise exception 'linked pending mail sent';end if;
+ a:=create_customer_booking_atomic(s,sv,st,t+interval '180 minutes','未送信予約','09000000043','phone',null,'test@example.com',repeat('c',64),'cipher-c');
+ update email_booking_events set created_at=clock_timestamp()-interval '24 hours' where reservation_id=a.id;
+ if claim_email_booking_event(s,a.id) is not null then raise exception 'expired key retried';end if;
+ if not exists(select 1 from email_booking_events where reservation_id=a.id and state='expired') then raise exception 'expired not recorded';end if;
+ if has_table_privilege('authenticated','email_booking_tokens','select') or has_function_privilege('anon','claim_email_booking_event(uuid,uuid)','execute') then raise exception 'private mail access';end if;
+end $test$;
+rollback;

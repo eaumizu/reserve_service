@@ -1,0 +1,17 @@
+import {beforeEach,afterEach,it,expect,vi} from "vitest";
+const {rpc,sender}=vi.hoisted(()=>({rpc:vi.fn(),sender:vi.fn()}));
+vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));
+vi.mock("../lib/store-email",()=>({emailPlatformReady:()=>Boolean(process.env.RESEND_API_KEY),verifiedEmailSender:sender}));
+import {encryptLineCredential} from "../lib/line-settings-secret";
+import {hashCustomerToken} from "../lib/customer-booking";
+import {sendEmailBookingEvent,emailBookingMessage,dispatchEmailBookingEvents,type EmailBookingEvent} from "../lib/email-booking-events";
+const token="a".repeat(64);
+let job:EmailBookingEvent;
+beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("RESEND_API_KEY","test");vi.stubEnv("LINE_SETTINGS_ENCRYPTION_KEY","b".repeat(64));vi.stubEnv("LINE_BOOKING_SITE_URL","https://booking.example.com");job={id:"retry-key",storeId:"trusted",reservationId:"booking",leaseId:"lease",recipient:"test@example.com",kind:"created",payload:{storeName:"店舗",serviceName:"整体",staffName:"担当",startAt:"2030-01-02T01:15:00Z",endAt:"2030-01-02T02:15:00Z",oldStartAt:"2030-01-01T01:15:00Z",oldEndAt:"2030-01-01T02:15:00Z",oldStaffName:"前の担当",oldServiceName:"整体",from:"店舗 <booking@example.com>",replyTo:"reply@example.com",senderRevision:"revision",domainId:"domain",tokenHash:hashCustomerToken(token),tokenCipher:encryptLineCredential("trusted",token)}};sender.mockResolvedValue({senderName:"店舗",senderEmail:"booking@example.com",revision:"revision",domainId:"domain"});vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response("",{status:200})));});
+afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();});
+it("sends the original dedicated link with Japanese booking details",async()=>{await sendEmailBookingEvent(job);const body=JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);expect(body.text).toContain("2030/01/02 10:15");expect(body.text).toContain(`https://booking.example.com/reservation#${token}`);expect(body.reply_to).toBe("reply@example.com");expect(body.text).not.toContain(job.recipient);expect(vi.mocked(fetch).mock.calls[0][1]!.headers).toEqual(expect.objectContaining({"Idempotency-Key":job.id}));});
+it("formats changes and cancellations",()=>{expect(emailBookingMessage({...job,kind:"changed"})).toContain("変更前：");expect(emailBookingMessage({...job,kind:"cancelled"})).toContain("予約をキャンセルしました");});
+it("refuses a tampered token or changed sender before sending",async()=>{await expect(sendEmailBookingEvent({...job,payload:{...job.payload,tokenHash:"bad"}})).rejects.toThrow();await expect(sendEmailBookingEvent({...job,payload:{...job.payload,senderRevision:"old"}})).rejects.toThrow();expect(fetch).not.toHaveBeenCalled();});
+it("does not expose another store's link",()=>{expect(()=>emailBookingMessage({...job,storeId:"other"})).toThrow();});
+it("keeps delivery failure pending without throwing to the booking route",async()=>{rpc.mockResolvedValueOnce({data:job}).mockResolvedValueOnce({error:null}).mockResolvedValueOnce({data:{pending:1}});vi.mocked(fetch).mockRejectedValue(new Error("private"));expect(await dispatchEmailBookingEvents("trusted","booking")).toEqual({pending:true,sent:0,failed:1});expect(rpc).toHaveBeenCalledWith("finish_email_booking_event",{p_store_id:"trusted",p_id:job.id,p_lease_id:job.leaseId,p_sent:false});});
+it("rejects cross-tenant jobs without sending",async()=>{rpc.mockResolvedValue({data:{...job,storeId:"other"}});expect((await dispatchEmailBookingEvents("trusted","booking")).pending).toBe(true);expect(fetch).not.toHaveBeenCalled();});

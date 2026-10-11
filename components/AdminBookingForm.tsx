@@ -108,7 +108,7 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
       }
       setConfirmed(false); setName(""); setPhone(""); setEmail(""); setStart(""); setNote("");
       setSlotsVersion(version => version + 1);
-      setSuccess("予約を登録しました。");
+      setSuccess(result.notificationWarning?`予約を登録しました。${result.notificationWarning}`:"予約を登録しました。");
       await onCreated();
     } catch (e) { setError(e instanceof Error ? e.message : "通信エラーです。予約一覧を確認してから再操作してください。"); }
     finally { setBusy(false); onBusy(false); }
