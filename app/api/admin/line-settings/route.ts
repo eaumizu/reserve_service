@@ -13,7 +13,7 @@ export async function GET(request:NextRequest){
     if(result.error)throw result.error;const row=result.data;
     return respond({storeId:user.storeId,accountName:row?.account_name??"",friendUrl:row?.friend_url??"",channelId:row?.channel_id??"",
       hasAccessToken:!!row?.access_token_cipher,hasChannelSecret:!!row?.channel_secret_cipher,version:row?.version??null,
-      updatedAt:row?.updated_at??null,encryptionReady:lineEncryptionReady(),messagingActive:false});
+      updatedAt:row?.updated_at??null,encryptionReady:lineEncryptionReady(),bookingLinkNotificationsSupported:true});
   }catch{return respond({error:"LINE設定を取得できませんでした。追加SQLの適用をご確認ください。"},503);}
 }
 export async function POST(request:NextRequest){
@@ -32,6 +32,6 @@ export async function POST(request:NextRequest){
       if(result.error.code==="23505")return respond({error:"このLINEチャネルは別の店舗で使用されています。"},409);
       throw result.error;
     }
-    return respond({...result.data,storeId:user.storeId,encryptionReady:lineEncryptionReady(),messagingActive:false});
+    return respond({...result.data,storeId:user.storeId,encryptionReady:lineEncryptionReady(),bookingLinkNotificationsSupported:true});
   }catch{return respond({error:"LINE設定を保存できませんでした。再読み込みして結果をご確認ください。"},503);}
 }

@@ -57,6 +57,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0011_customer_booking_access.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0012_store_line_settings.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0013_customer_line_links.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0014_line_booking_notifications.sql
           psql -v ON_ERROR_STOP=1 -f supabase/seed.sql
           psql -v ON_ERROR_STOP=1 -f tests/customer-booking-db.sql
       - name: Browser checks

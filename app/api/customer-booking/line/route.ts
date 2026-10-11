@@ -1,5 +1,5 @@
 import {NextRequest,NextResponse} from "next/server";
-import {decryptLineCredential} from "../../../../lib/line-settings-secret";
+import {decryptLineCredential,encryptLineCredential} from "../../../../lib/line-settings-secret";
 import {lineMessageUrl} from "../../../../lib/line-message-url";
 import {randomBytes} from "node:crypto";
 import {CUSTOMER_TOKEN,CUSTOMER_HEADERS,hashCustomerToken,type CustomerBooking} from "../../../../lib/customer-booking";
@@ -26,7 +26,7 @@ export async function POST(request:NextRequest){
   const id=info.basicId;
   if(typeof id!=="string"||!/^@[a-zA-Z0-9._-]+$/.test(id))throw new Error("invalid_line_id");
   const code=randomBytes(16).toString("hex");
-  const issued=await db.rpc("issue_customer_line_code",{p_token_hash:hash,p_code_hash:hashCustomerToken(code)});
+  const issued=await db.rpc("issue_customer_line_notification_code",{p_token_hash:hash,p_code_hash:hashCustomerToken(code),p_booking_token_cipher:encryptLineCredential(booking.storeId,body.token)});
   if(issued.error)return respond({error:"コードを発行できません。予約の状態を再確認してください。"},409);
   return respond({message:`予約連携 ${code}`,chatUrl:lineMessageUrl(id,`予約連携 ${code}`),friendUrl:settings.data!.friend_url,expiresInMinutes:10});
  }catch{return respond({error:"LINE連携を確認できませんでした。店舗にお問い合わせください。"},503);}
