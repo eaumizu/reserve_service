@@ -27,7 +27,7 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   await page.getByRole('button',{name:'前日通知を有効にする',exact:true}).click();await page.getByRole('button',{name:'前日通知を停止',exact:true}).waitFor().catch(async e=>{console.log(JSON.stringify({enabled,actions,dialogs,errors,text:(await page.locator('body').innerText()).slice(-2500)}));throw e;});
   await page.getByRole('button',{name:'電話で連絡済みにする',exact:true}).click();await page.getByRole('status').filter({hasText:'電話での連絡済みを記録しました。'}).waitFor();await page.getByRole('cell',{name:/^電話で連絡済み/}).waitFor();
   assert.equal(await page.getByRole('button',{name:'電話で連絡済みにする',exact:true}).count(),0);assert.equal(sends,0);assert.deepEqual(errors,[]);
-  await page.getByRole('button',{name:'予約一覧',exact:true}).click();await page.getByRole('heading',{name:'予約一覧',exact:true}).waitFor();
+  await page.getByRole('button',{name:'予約一覧',exact:true}).click();await page.getByRole('heading',{name:'予約一覧',exact:true,level:2}).waitFor();
   console.log('PASS '+width+'px reminder opt-in, phone contacts, saved status and navigation');await page.close();
  }
  await browser.close();
