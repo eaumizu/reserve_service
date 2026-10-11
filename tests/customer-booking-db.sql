@@ -26,6 +26,21 @@ begin
   if (select start_at from reservations where id=original.id)<>start_time then raise exception 'window rejection did not roll back move'; end if;
   result:=manage_customer_booking_atomic(repeat('a',64),'reschedule',original.updated_at,start_time+interval '3 hours 15 minutes');
   if (result->>'startAt')::timestamptz<>start_time+interval '3 hours 15 minutes' then raise exception 'quarter hour move failed'; end if;
+  insert into staff(id,store_id,name,active) values('22222222-2222-2222-2222-222222222223',store,'別担当',true);
+  insert into staff_services(staff_id,service_id) values('22222222-2222-2222-2222-222222222223',service);
+  if jsonb_array_length(customer_booking_staff_choices(repeat('a',64)))<2 then raise exception 'eligible roster missing'; end if;
+  begin
+    perform manage_customer_booking_with_staff_atomic(repeat('a',64),'reschedule',(result->>'updatedAt')::timestamptz,start_time,'99999999-9999-9999-9999-999999999999');
+    raise exception 'expected invalid staff failure';
+  exception when others then if sqlerrm<>'invalid_staff_service' then raise; end if; end;
+  result:=manage_customer_booking_with_staff_atomic(repeat('a',64),'reschedule',(result->>'updatedAt')::timestamptz,start_time+interval '2 hours','22222222-2222-2222-2222-222222222223');
+  if result->>'staffName'<>'別担当' or (result->>'startAt')::timestamptz<>occupied.start_at then raise exception 'staff move to wider availability failed'; end if;
+  begin
+    perform manage_customer_booking_with_staff_atomic(repeat('a',64),'reschedule',(result->>'updatedAt')::timestamptz,occupied.start_at,staff_id);
+    raise exception 'expected other staff occupied failure';
+  exception when others then if sqlerrm<>'time_slot_unavailable' then raise; end if; end;
+  if (select r.staff_id from reservations r where r.id=original.id)<>'22222222-2222-2222-2222-222222222223'::uuid then raise exception 'failed staff move changed original'; end if;
+  if has_function_privilege('anon','manage_customer_booking_with_staff_atomic(text,text,timestamptz,timestamptz,uuid)','execute') then raise exception 'staff mutation privilege leaked'; end if;
   version:=(result->>'updatedAt')::timestamptz;
   begin
     perform manage_customer_booking_atomic(repeat('a',64),'cancel',original.updated_at,null);

@@ -28,16 +28,26 @@ export async function POST(request: NextRequest) {
       if (!booking.canManage) return respond({error:"この予約は変更できません。店舗にお問い合わせください。"},409);
       if (typeof body.date!=="string" || !isBookingDate(body.date)) return respond({error:"正しい日付を選択してください。"},400);
       const rules=await readBookingRules(booking.storeId), bounds=bookingDateBounds(rules);
-      if (body.date<bounds.minDate || body.date>bounds.maxDate) return respond({slots:[]});
-      const slots=await adminAvailableStarts(booking.storeId,booking.serviceId,booking.staffId,body.date,booking.id);
-      return respond({slots:(slots??[]).filter(start=>acceptsWebBooking(start,rules))});
+      if (body.date<bounds.minDate || body.date>bounds.maxDate) return respond({staffSlots:[]});
+      const roster=await db.rpc("customer_booking_staff_choices",{p_token_hash:hash});
+      if(roster.error || !Array.isArray(roster.data)) throw new Error("Staff choices unavailable");
+      const groups=await Promise.all(roster.data.map(async (staff:{id:string;name:string})=>({
+        staffId:staff.id,staffName:staff.name,
+        starts:(await adminAvailableStarts(booking.storeId,booking.serviceId,staff.id,body.date,booking.id)??[])
+          .filter(start=>acceptsWebBooking(start,rules))
+      })));
+      return respond({staffSlots:groups});
     }
     if (!["cancel","reschedule"].includes(body.action) || typeof body.expectedUpdatedAt!=="string" ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/.test(body.expectedUpdatedAt) ||
       !Number.isFinite(Date.parse(body.expectedUpdatedAt))) return respond({error:"予約を再読み込みしてください。"},400);
     if (body.action==="reschedule" && (typeof body.startAt!=="string" || !isGridTimestamp(body.startAt))) return respond({error:"空き枠から日時を選んでください。"},400);
-    const result=await db.rpc("manage_customer_booking_atomic",{p_token_hash:hash,p_action:body.action,
-      p_expected_updated_at:body.expectedUpdatedAt,p_start_at:body.action==="reschedule"?body.startAt:null});
+    if(body.action==="reschedule" && body.staffId!==undefined &&
+      (typeof body.staffId!=="string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(body.staffId)))
+      return respond({error:"担当者名付きの空き枠から選んでください。"},400);
+    const result=await db.rpc(body.action==="reschedule"?"manage_customer_booking_with_staff_atomic":"manage_customer_booking_atomic",{p_token_hash:hash,p_action:body.action,
+      p_expected_updated_at:body.expectedUpdatedAt,p_start_at:body.action==="reschedule"?body.startAt:null,
+      ...(body.action==="reschedule"?{p_staff_id:body.staffId??booking.staffId}:{})});
     if (result.error) {
       if (result.error.message.includes("booking_not_found")) return respond({error:"予約リンクが無効です。店舗にお問い合わせください。"},404);
       if (["booking_changed","reservation_changed","booking_closed","booking_window_closed","time_slot_unavailable","outside_business_hours","invalid_staff_service"].some(code=>result.error!.message.includes(code)))

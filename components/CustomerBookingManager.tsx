@@ -2,13 +2,15 @@
 import { useEffect,useRef,useState } from "react";
 import type { CustomerBooking } from "../lib/customer-booking";
 import {CustomerLineLink} from "./CustomerLineLink";
+type StaffSlots={staffId:string;staffName:string;starts:string[]};
 type Mode="view"|"change"|"cancel"|"confirmChange";
 const statuses:Record<string,string>={confirmed:"予約確定",cancelled:"キャンセル済み",completed:"施術完了",no_show:"無断キャンセル"};
 const japan=(value:string)=>new Date(value).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"});
 export function CustomerBookingManager(){
   const token=useRef(""),sequence=useRef(0),inFlight=useRef(false);
   const [booking,setBooking]=useState<CustomerBooking>(),[bounds,setBounds]=useState({minDate:"",maxDate:""});
-  const [mode,setMode]=useState<Mode>("view"),[date,setDate]=useState(""),[slots,setSlots]=useState<string[]>([]),[start,setStart]=useState("");
+  const [mode,setMode]=useState<Mode>("view"),[date,setDate]=useState(""),[slots,setSlots]=useState<StaffSlots[]>([]),[start,setStart]=useState("");
+  const [staffId,setStaffId]=useState(""),[staffName,setStaffName]=useState("");
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState(""),[success,setSuccess]=useState("");
   async function request(body:Record<string,unknown>,signal?:AbortSignal){
     const r=await fetch("/api/customer-booking",{method:"POST",cache:"no-store",signal,headers:{"Content-Type":"application/json"},body:JSON.stringify({...body,token:token.current})});
@@ -22,20 +24,20 @@ export function CustomerBookingManager(){
     return()=>{active=false;controller.abort();};
   },[]);
   async function reload(){
-    if(inFlight.current)return;inFlight.current=true;setBusy(true);setError("");setSuccess("");setMode("view");setSlots([]);setStart("");
+    if(inFlight.current)return;inFlight.current=true;setBusy(true);++sequence.current;setError("");setSuccess("");setMode("view");setSlots([]);setStart("");
     try{const result=await request({action:"view"});setBooking(result.booking);setBounds(result.bounds);}
     catch(e){setError(e instanceof Error?e.message:"予約を取得できません。");}finally{setBusy(false);inFlight.current=false;}
   }
   async function loadSlots(value:string){
     const seq=++sequence.current;setDate(value);setSlots([]);setStart("");setError("");
     if(!value){setLoading(false);return;}setLoading(true);
-    try{const result=await request({action:"slots",date:value});if(seq===sequence.current)setSlots(result.slots);}
+    try{const result=await request({action:"slots",date:value});if(seq===sequence.current)setSlots(result.staffSlots);}
     catch(e){if(seq===sequence.current)setError(e instanceof Error?e.message:"空き枠を取得できません。");}
     finally{if(seq===sequence.current)setLoading(false);}
   }
   async function save(action:"cancel"|"reschedule"){
     if(!booking||inFlight.current)return;inFlight.current=true;setBusy(true);setError("");setSuccess("");
-    try{const result=await request({action,expectedUpdatedAt:booking.updatedAt,...(action==="reschedule"?{startAt:start}:{})});
+    try{const result=await request({action,expectedUpdatedAt:booking.updatedAt,...(action==="reschedule"?{startAt:start,staffId}:{})});
       setBooking(result.booking);setMode("view");setSlots([]);setStart("");if(result.notificationWarning)setError(result.notificationWarning);setSuccess(action==="cancel"?"予約をキャンセルしました。":"予約日時を変更しました。");}
     catch(e){setError(e instanceof Error?e.message:"通信エラーです。予約を再読み込みして結果をご確認ください。");}
     finally{setBusy(false);inFlight.current=false;}
@@ -52,16 +54,16 @@ export function CustomerBookingManager(){
       {booking.canManage&&mode==="view"&&<div className="grid"><button disabled={busy} onClick={()=>{setMode("change");setDate("");setSlots([]);setStart("");setSuccess("");}}>予約日時を変更</button>
       <button disabled={busy} onClick={()=>{setMode("cancel");setSuccess("");}}>予約をキャンセル</button></div>}
       {booking.canManage&&mode==="change"&&<>
-        <h3>変更先の日時を選択</h3><p>同じメニュー・担当者の空き枠から選択できます。</p>
+        <h3>変更先の日時を選択</h3><p>同じメニューを担当できるスタッフ全員の空き枠を表示します。日時と担当者を一緒に選択してください。</p>
         <label>変更先の予約日<input type="date" min={bounds.minDate} max={bounds.maxDate} disabled={busy} value={date} onChange={e=>void loadSlots(e.target.value)}/></label>
-        {loading?<p role="status">空き枠を確認しています…</p>:<div className="grid">{slots.map(value=><button key={value} className={start===value?"selected":""} onClick={()=>setStart(value)}>{japan(value)}</button>)}</div>}
-        {date&&!loading&&!slots.length&&!error&&<p>予約可能な空き枠がありません。別の日を選択してください。</p>}
+        {loading?<p role="status">空き枠を確認しています…</p>:<div className="grid">{slots.map(group=><div key={group.staffId}><h4>{group.staffName}</h4>{group.starts.length?<div className="grid">{group.starts.map(value=><button key={value} aria-pressed={start===value&&staffId===group.staffId} className={start===value&&staffId===group.staffId?"selected":""} onClick={()=>{setStart(value);setStaffId(group.staffId);setStaffName(group.staffName);}}>{japan(value)} ／ {group.staffName}</button>)}</div>:<p>この担当者の空き枠はありません。</p>}</div>)}</div>}
+        {date&&!loading&&!slots.some(group=>group.starts.length)&&!error&&<p>予約可能な空き枠がありません。別の日を選択してください。</p>}
         <button disabled={!start||loading||busy} onClick={()=>setMode("confirmChange")}>変更内容を確認</button>
         <button disabled={busy||loading} onClick={()=>setMode("view")}>戻る</button>
       </>}
       {booking.canManage&&(mode==="cancel"||mode==="confirmChange")&&<>
         <h3>{mode==="cancel"?"この予約をキャンセルしますか？":"この日時に変更しますか？"}</h3>
-        {mode==="confirmChange"&&<p>{japan(start)}（日本時間）</p>}
+        {mode==="confirmChange"&&<p>{japan(start)}（日本時間） ／ {staffName}</p>}
         <div className="grid"><button disabled={busy} onClick={()=>setMode(mode==="cancel"?"view":"change")}>戻る</button>
         <button className="primary" disabled={busy} onClick={()=>void save(mode==="cancel"?"cancel":"reschedule")}>{busy?"処理中…":mode==="cancel"?"キャンセルを確定":"変更を確定"}</button></div>
       </>}
