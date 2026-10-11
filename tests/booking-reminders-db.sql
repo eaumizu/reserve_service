@@ -40,6 +40,16 @@ begin
  if not exists(select 1 from booking_reminders where booking_reminders.id=reminder_id and state='obsolete') then raise exception 'changed contact shown as current';end if;
  perform prepare_booking_reminders(s,false);
  if not exists(select 1 from booking_reminders where reservation_id=c.id and state='phone') then raise exception 'new contact target missing';end if;
+ update reservations set status='confirmed' where reservations.id=b.id;
+ perform prepare_booking_reminders(s,false);
+ if not exists(select 1 from booking_reminders where reservation_id=b.id and state='phone' and channel='phone') then raise exception 'unconfigured email did not fall back to phone';end if;
+ update reservations set staff_id='22222222-2222-2222-2222-222222222223' where reservations.id=a.id;
+ perform prepare_booking_reminders(s,false);
+ if (select count(*) from booking_reminders where reservation_id=a.id and state='pending')<>1 then raise exception 'changed sent reminder did not refresh';end if;
+ update booking_reminders set first_attempt_at=clock_timestamp()-interval '24 hours' where reservation_id=a.id and state='pending';
+ perform prepare_booking_reminders(s,false);
+ if not exists(select 1 from booking_reminders where reservation_id=a.id and state='phone' and failed) then raise exception 'expired retry key still automatic';end if;
+ if claim_booking_reminder(s) is not null then raise exception 'expired reminder claimed';end if;
  if has_table_privilege('anon','booking_reminders','select') or has_function_privilege('authenticated','claim_booking_reminder(uuid)','execute') then raise exception 'reminder privileges leaked';end if;
  if jsonb_array_length(booking_reminder_dashboard('99999999-9999-9999-9999-999999999999',true)->'rows')<>0 then raise exception 'dashboard tenant leak';end if;
  perform set_booking_reminders_enabled(s,false);

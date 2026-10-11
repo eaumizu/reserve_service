@@ -24,7 +24,7 @@ export async function sendBookingReminder(job:ReminderJob){
   if(!r.ok&&!(r.status===409&&r.headers.get("x-line-accepted-request-id")))throw new Error("line_failed");
  }else if(job.channel==="email"){
   if(!reminderEmailReady()||!/^\S+@\S+\.\S+$/.test(job.recipient))throw new Error("email_not_ready");
-  const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","Idempotency-Key":job.id},body:JSON.stringify({from:process.env.REMINDER_EMAIL_FROM,to:[job.recipient],subject:"明日のご予約のお知らせ",text}),redirect:"error",signal:AbortSignal.timeout(6000)});
+  const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","Idempotency-Key":job.id,"User-Agent":"reserve-service/1.0"},body:JSON.stringify({from:process.env.REMINDER_EMAIL_FROM,to:[job.recipient],subject:"明日のご予約のお知らせ",text}),redirect:"error",signal:AbortSignal.timeout(6000)});
   if(!r.ok)throw new Error("email_failed");
  }else throw new Error("unsupported_channel");
 }
@@ -41,7 +41,7 @@ export async function dispatchBookingReminders(storeId:string|null){
   try{await sendBookingReminder(job);accepted=true;}catch{failed++;}
   const finished=await db.rpc("finish_booking_reminder",{p_store_id:job.storeId,p_id:job.id,p_lease_id:job.leaseId,p_sent:accepted});
   if(finished.error)throw new Error("record_failed");if(accepted)sent++;
-  // Resend's default limit is two requests per second.
+  // Keep a conservative per-invocation email rate; provider limits are account-wide.
   if(job.channel==="email")await new Promise(resolve=>setTimeout(resolve,600));
  }
  return {sent,failed};

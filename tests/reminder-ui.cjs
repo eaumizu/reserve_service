@@ -5,8 +5,8 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   const page=await browser.newPage({viewport:{width,height:844}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>dialog.accept());
   const user={id:'5877c0b4-11fc-4a92-a647-ac0cde8bb2d7',email:'staff@example.com',app_metadata:{store_id:'11111111-1111-1111-1111-111111111111',role:'admin'},user_metadata:{},aud:'authenticated',created_at:'2026-01-01T00:00:00Z'};
   const jwt=[{alg:'HS256',typ:'JWT'},{sub:user.id,exp:Math.floor(Date.now()/1000)+3600},{}].map(x=>Buffer.from(JSON.stringify(x)).toString('base64url')).join('.');
-  await page.route('**/auth/v1/token*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:jwt,refresh_token:'refresh',expires_in:3600,token_type:'bearer',user})}));
-  await page.route('**/auth/v1/user*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(user)}));
+  await page.route('**/auth/v1/token*',route=>route.fulfill({status:200,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,OPTIONS'},contentType:'application/json',body:JSON.stringify({access_token:jwt,refresh_token:'refresh',expires_in:3600,token_type:'bearer',user})}));
+  await page.route('**/auth/v1/user*',route=>route.fulfill({status:200,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,OPTIONS'},contentType:'application/json',body:JSON.stringify(user)}));
   await page.route('**/api/admin/reservations?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({reservations:[],staff:[],hasMore:false,canManageSettings:true})}));
   let enabled=false,sends=0;
   let row={id:'77777777-7777-7777-7777-777777777777',startAt:'2030-01-02T01:15:00Z',customerName:'電話のお客様',phone:'09000000033',staffName:'担当',serviceName:'整体',state:'phone',channel:'phone',failed:false,sentAt:null,contactedAt:null};
