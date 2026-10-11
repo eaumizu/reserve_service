@@ -11,7 +11,7 @@ type Options = {
 const japanTime = (value: string) => new Date(value).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" });
 
 export function AdminRescheduleForm({ auth, reservation, onChanged, onClose, onBusy }: {
-  auth: SupabaseClient; reservation: AdminReservation; onChanged: () => Promise<void>;
+  auth: SupabaseClient; reservation: AdminReservation; onChanged: (notificationWarning?:string) => Promise<void>;
   onClose: () => void; onBusy: (busy: boolean) => void;
 }) {
   const [options, setOptions] = useState<Options>();
@@ -104,7 +104,7 @@ export function AdminRescheduleForm({ auth, reservation, onChanged, onClose, onB
         }
         throw new Error(result.error ?? "変更結果を確認できません。一覧を更新してください。");
       }
-      await onChanged();
+      await onChanged(result.notificationWarning??undefined);
     } catch (e) {
       setError(e instanceof Error && !(e instanceof TypeError) ? e.message : "通信エラーです。一覧を更新して変更結果を確認してください。");
     } finally { setBusy(false); onBusy(false); }

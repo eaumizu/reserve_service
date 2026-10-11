@@ -1,0 +1,13 @@
+import {beforeEach,expect,it,vi} from "vitest";
+import {NextRequest} from "next/server";
+const {authorize,dispatch,rpc}=vi.hoisted(()=>({authorize:vi.fn(),dispatch:vi.fn(),rpc:vi.fn()}));
+vi.mock("../lib/admin-auth",()=>({authorizeStaff:authorize}));
+vi.mock("../lib/line-reservation-events",()=>({dispatchLineReservationEvents:dispatch}));
+vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));
+import {GET,POST} from "../app/api/admin/line-settings/notifications/route";
+const req=()=>new NextRequest("http://localhost/api/admin/line-settings/notifications",{method:"POST",body:JSON.stringify({storeId:"other"})});
+beforeEach(()=>{vi.resetAllMocks();authorize.mockResolvedValue({role:"admin",storeId:"trusted"});dispatch.mockResolvedValue({pending:false});rpc.mockResolvedValue({data:{pending:0,expired:0},error:null});});
+it("requires admin authentication for retry and summary",async()=>{authorize.mockResolvedValue(null);expect((await POST(req())).status).toBe(401);authorize.mockResolvedValue({role:"staff",storeId:"trusted"});expect((await GET(req())).status).toBe(403);expect(dispatch).not.toHaveBeenCalled();expect(rpc).not.toHaveBeenCalled();});
+it("uses authorized tenant and private cache headers",async()=>{const r=await POST(req());expect(dispatch).toHaveBeenCalledWith("trusted");expect(rpc).toHaveBeenCalledWith("line_reservation_event_summary",{p_store_id:"trusted"});expect(await r.json()).toEqual({pending:0,expired:0,retryPending:false});expect(r.headers.get("cache-control")).toBe("private, no-store");});
+it("summary reads do not send messages",async()=>{expect((await GET(req())).status).toBe(200);expect(dispatch).not.toHaveBeenCalled();});
+it("redacts database failures",async()=>{rpc.mockResolvedValue({error:{message:"private"}});const r=await POST(req());expect(r.status).toBe(503);expect(await r.text()).not.toContain("private");});

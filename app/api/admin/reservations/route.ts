@@ -1,3 +1,5 @@
+import {dispatchLineReservationEvents,LINE_EVENT_WARNING} from "../../../../lib/line-reservation-events";
+export const maxDuration=30;
 import { parseCustomerEmail } from "../../../../lib/reservations/email";
 import { TIME_STEP_MS } from "../../../../lib/reservations/time-grid";
 import { authorizeStaff } from "../../../../lib/admin-auth";
@@ -83,7 +85,8 @@ export async function PATCH(request: NextRequest) {
     const { data, error } = await query.select("id,status,updated_at").maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "予約が更新されたか、操作できる時刻になっていません。施術完了は片付け時間終了後、無断キャンセルは開始時刻以降に記録できます。一覧を更新してください。" }, { status: 409, headers });
-    return NextResponse.json({ reservation: data }, { headers });
+    const notification=body.status==="cancelled"?await dispatchLineReservationEvents(staff.storeId,data.id):{pending:false};
+    return NextResponse.json({ reservation: data,notificationWarning:notification.pending?LINE_EVENT_WARNING:null }, { headers });
   } catch {
     return NextResponse.json({ error: "予約状態の更新結果を確認できませんでした。一覧を更新して確認してください。" }, { status: 503, headers });
   }

@@ -1,3 +1,5 @@
+import {dispatchLineReservationEvents,LINE_EVENT_WARNING} from "../../../lib/line-reservation-events";
+export const maxDuration=30;
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "../../../lib/supabase-server";
 import { CUSTOMER_TOKEN, CUSTOMER_HEADERS, hashCustomerToken, type CustomerBooking } from "../../../lib/customer-booking";
@@ -42,6 +44,7 @@ export async function POST(request: NextRequest) {
         return respond({error:"予約の状態や空き枠が変わったか、受付期限を過ぎました。予約を再読み込みしてください。"},409);
       throw result.error;
     }
-    return respond({booking:result.data});
+    const notification=await dispatchLineReservationEvents(booking.storeId,booking.id);
+    return respond({booking:result.data,notificationWarning:notification.pending?"予約の操作は完了しました。LINE通知は未送信のため、店舗へお問い合わせください。":null});
   } catch { return respond({error:"予約の確認・操作ができませんでした。操作後の通信エラーでは、再読み込みして結果をご確認ください。"},503); }
 }

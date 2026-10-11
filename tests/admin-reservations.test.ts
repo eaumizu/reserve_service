@@ -1,3 +1,5 @@
+const {notify}=vi.hoisted(()=>({notify:vi.fn()}));
+vi.mock("../lib/line-reservation-events",()=>({dispatchLineReservationEvents:notify,LINE_EVENT_WARNING:"pending"}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
@@ -11,7 +13,7 @@ vi.mock("../lib/supabase-server", () => ({ supabaseServer }));
 import { GET, POST, PATCH } from "../app/api/admin/reservations/route";
 
 beforeEach(() => {
-  vi.resetAllMocks();
+  vi.resetAllMocks();notify.mockResolvedValue({pending:false});
   supabaseServer.mockReturnValue({ from: (table: string) => table === "staff" ? roster : query, rpc });
   query.in.mockReturnValue(query); query.gt.mockReturnValue(query); query.ilike.mockReturnValue(query); query.select.mockReturnValue(query); query.eq.mockReturnValue(query); query.order.mockReturnValue(query);
   query.gte.mockReturnValue(query); query.lt.mockReturnValue(query); query.lte.mockReturnValue(query);
@@ -55,7 +57,7 @@ describe("reservation cancellation", () => {
     expect(Number.isFinite(Date.parse(update.updated_at))).toBe(true);
     expect(query.eq.mock.calls).toEqual([["id", reservationId], ["store_id", storeId], ["status", "confirmed"]]);
     expect(query.maybeSingle).toHaveBeenCalledOnce();
-    expect(await response.json()).toEqual({ reservation: { id: reservationId, status: "cancelled" } });
+    expect(await response.json()).toEqual({ reservation: { id: reservationId, status: "cancelled" },notificationWarning:null });
     expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
   it("returns a generic conflict for another store, missing reservation or changed status", async () => {
@@ -306,3 +308,5 @@ describe("admin reservations API", () => {
     expect(response.status).toBe(503); expect(await response.text()).not.toContain("private roster detail");
   });
 });
+
+it("returns cancellation success with a notification warning when LINE is unavailable",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});query.maybeSingle.mockResolvedValue({data:{id:reservationId,status:"cancelled"},error:null});notify.mockResolvedValue({pending:true});const r=await patch({reservationId,status:"cancelled"});expect(r.status).toBe(200);expect((await r.json()).notificationWarning).toBe("pending");expect(notify).toHaveBeenCalledWith("trusted",reservationId);});

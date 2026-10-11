@@ -1,3 +1,5 @@
+const {notify}=vi.hoisted(()=>({notify:vi.fn()}));
+vi.mock("../lib/line-reservation-events",()=>({dispatchLineReservationEvents:notify,LINE_EVENT_WARNING:"pending"}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 const { authorizeStaff, supabaseServer, rpc } = vi.hoisted(() => ({ authorizeStaff: vi.fn(), supabaseServer: vi.fn(), rpc: vi.fn() }));
@@ -11,7 +13,7 @@ const input = {
 const request = (body: unknown) => POST(new NextRequest("http://localhost/api/admin/reservations/reschedule", {
   method: "POST", headers: { authorization: "Bearer token", "content-type": "application/json" }, body: JSON.stringify(body),
 }));
-beforeEach(() => { vi.resetAllMocks(); supabaseServer.mockReturnValue({ rpc }); });
+beforeEach(() => { vi.resetAllMocks();notify.mockResolvedValue({pending:false}); supabaseServer.mockReturnValue({ rpc }); });
 describe("atomic reservation changes", () => {
   it.each(["15", "45"])("accepts rescheduling to minute %s", async minute => {
     authorizeStaff.mockResolvedValue({ storeId: "verified-store" });
@@ -61,3 +63,5 @@ describe("atomic reservation changes", () => {
     expect(rpc).toHaveBeenCalledOnce();
   });
 });
+
+it("keeps a staff reschedule successful and surfaces pending LINE delivery",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});supabaseServer.mockReturnValue({rpc});rpc.mockResolvedValue({data:{id:input.reservationId,staff_id:input.staffId,start_at:input.startAt},error:null});notify.mockResolvedValue({pending:true});const r=await request(input);expect(r.status).toBe(200);expect((await r.json()).notificationWarning).toBe("pending");expect(notify).toHaveBeenCalledWith("trusted",input.reservationId);});

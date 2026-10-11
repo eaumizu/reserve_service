@@ -152,9 +152,9 @@ export function AdminReservations() {
     await auth!.auth.signOut();
   }
 
-  async function reservationChanged() {
+  async function reservationChanged(notificationWarning?:string) {
     setChangeTarget(null); setRows([]); setError("");
-    setSuccess("予約日時・担当者を変更しました。");
+    setSuccess("予約日時・担当者を変更しました。"+(notificationWarning??""));
     try { await load(); }
     catch { setError("変更は完了しましたが、一覧を取得できません。「更新」を押してください。"); }
   }
@@ -179,6 +179,7 @@ export function AdminReservations() {
         if (response.status === 401) await logout();
         throw new Error(result.error ?? "状態を更新できませんでした。一覧を更新してください。");
       }
+      if(result.notificationWarning)setError(result.notificationWarning);
       setStatusTarget(null);
       setRows(current => current.map(row => row.id === reservation.id ? { ...row, ...result.reservation } : row));
       setSuccess(`${reservation.customers?.name ?? "お客様"} 様の予約を「${statuses[status]}」として保存しました。一覧の状態と操作欄を更新しました。`);
