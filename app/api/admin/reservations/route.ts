@@ -1,5 +1,7 @@
-import {dispatchLineReservationEvents,LINE_EVENT_WARNING} from "../../../../lib/line-reservation-events";
-export const maxDuration=30;
+import {createCustomerToken,hashCustomerToken} from "../../../../lib/customer-booking";
+import {emailBookingTokenCipher,dispatchEmailBookingEvents,EMAIL_EVENT_WARNING} from "../../../../lib/email-booking-events";
+import {dispatchReservationNotifications} from "../../../../lib/email-booking-events";
+export const maxDuration=60;
 import { parseCustomerEmail } from "../../../../lib/reservations/email";
 import { TIME_STEP_MS } from "../../../../lib/reservations/time-grid";
 import { authorizeStaff } from "../../../../lib/admin-auth";
@@ -85,8 +87,8 @@ export async function PATCH(request: NextRequest) {
     const { data, error } = await query.select("id,status,updated_at").maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "予約が更新されたか、操作できる時刻になっていません。施術完了は片付け時間終了後、無断キャンセルは開始時刻以降に記録できます。一覧を更新してください。" }, { status: 409, headers });
-    const notification=body.status==="cancelled"?await dispatchLineReservationEvents(staff.storeId,data.id):{pending:false};
-    return NextResponse.json({ reservation: data,notificationWarning:notification.pending?LINE_EVENT_WARNING:null }, { headers });
+    const notification=body.status==="cancelled"?await dispatchReservationNotifications(staff.storeId,data.id):{pending:false};
+    return NextResponse.json({ reservation: data,notificationWarning:notification.pending?"予約の操作は完了しました。通知に未送信があります。店舗設定の再送操作で確認してください。":null }, { headers });
   } catch {
     return NextResponse.json({ error: "予約状態の更新結果を確認できませんでした。一覧を更新して確認してください。" }, { status: 503, headers });
   }
@@ -116,9 +118,14 @@ export async function POST(request: NextRequest) {
     if (Date.parse(body.startAt) % TIME_STEP_MS !== 0) {
       return NextResponse.json({ error: "開始時間は15分刻みの空き枠から選択してください。" }, { status: 400 });
     }
-    const { data, error } = await supabaseServer().rpc(email ? "create_reservation_with_email_atomic" : "create_reservation_atomic", { ...(email ? { p_customer_email: email } : {}), p_store_id: staff.storeId, p_service_id: body.serviceId, p_staff_id: body.staffId, p_start_at: body.startAt, p_customer_name: body.customerName.trim(), p_customer_phone: body.customerPhone.trim(), p_source: body.source, p_note: body.note ?? null });
+    const token=createCustomerToken(),cipher=emailBookingTokenCipher(staff.storeId,token,email);
+    const params={ ...(email ? { p_customer_email: email } : {}), p_store_id: staff.storeId, p_service_id: body.serviceId, p_staff_id: body.staffId, p_start_at: body.startAt, p_customer_name: body.customerName.trim(), p_customer_phone: body.customerPhone.trim(), p_source: body.source, p_note: body.note ?? null };
+    let result=await supabaseServer().rpc(cipher?"create_customer_booking_atomic":email?"create_reservation_with_email_atomic":"create_reservation_atomic",{...params,...(cipher?{p_token_hash:hashCustomerToken(token),p_token_cipher:cipher}:{})});
+    if(cipher&&result.error?.code==="PGRST202")result=await supabaseServer().rpc("create_reservation_with_email_atomic",params);
+    const {data,error}=result;
     if (email && error?.code === "PGRST202") return NextResponse.json({ error: "メール連絡先の保存準備中です。時間をおいて再度お試しください。" }, { status: 503 });
     if (error) return NextResponse.json({ error: error.message.includes("outside_business_hours") ? "営業時間内の枠を指定してください。" : "指定した枠は予約できません。" }, { status: 409 });
-    return NextResponse.json({ reservation: data }, { status: 201 });
+    const notification=email?await dispatchEmailBookingEvents(staff.storeId,data.id):{pending:false};
+    return NextResponse.json({ reservation: data,notificationWarning:notification.pending?EMAIL_EVENT_WARNING:null }, { status: 201 });
   } catch { return NextResponse.json({ error: "予約を登録できませんでした。" }, { status: 500 }); }
 }

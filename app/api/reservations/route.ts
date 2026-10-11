@@ -1,3 +1,5 @@
+import {emailBookingTokenCipher,dispatchEmailBookingEvents,EMAIL_EVENT_WARNING} from "../../../lib/email-booking-events";
+export const maxDuration=60;
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "../../../lib/supabase-server";
 import type { ReservationInput } from "../../../lib/reservations/types";
@@ -15,11 +17,15 @@ export async function POST(request: NextRequest) {
     if (!acceptsWebBooking(body.startAt, await readBookingRules(storeId))) return NextResponse.json({ error: "予約受付期間または締め切りを過ぎています。別の空き枠を選択してください。" }, { status: 409 });
     const token=createCustomerToken();
     const db=supabaseServer();
+    const tokenCipher=emailBookingTokenCipher(storeId,token,email);
     let result=await db.rpc("create_customer_booking_atomic",{p_store_id:storeId,p_service_id:body.serviceId,p_staff_id:body.staffId,
       p_start_at:body.startAt,p_customer_name:body.customerName.trim(),p_customer_phone:body.customerPhone.trim(),p_source:body.source,
-      p_note:body.note??null,p_customer_email:email,p_token_hash:hashCustomerToken(token)});
+      p_note:body.note??null,p_customer_email:email,p_token_hash:hashCustomerToken(token),...(tokenCipher?{p_token_cipher:tokenCipher}:{})});
     let managePath: string|null=customerManagementPath(token);
     // Missing new RPC means no write occurred. Preserve booking during migration rollout.
+    if(result.error?.code==="PGRST202"&&tokenCipher){
+      result=await db.rpc("create_customer_booking_atomic",{p_store_id:storeId,p_service_id:body.serviceId,p_staff_id:body.staffId,p_start_at:body.startAt,p_customer_name:body.customerName.trim(),p_customer_phone:body.customerPhone.trim(),p_source:body.source,p_note:body.note??null,p_customer_email:email,p_token_hash:hashCustomerToken(token)});
+    }
     if(result.error?.code==="PGRST202"){
       managePath=null;
       result = await db.rpc(email ? "create_reservation_with_email_atomic" : "create_reservation_atomic", { ...(email ? { p_customer_email: email } : {}), p_store_id: storeId, p_service_id: body.serviceId, p_staff_id: body.staffId, p_start_at: body.startAt, p_customer_name: body.customerName.trim(), p_customer_phone: body.customerPhone.trim(), p_source: body.source, p_note: body.note ?? null });
@@ -28,6 +34,7 @@ export async function POST(request: NextRequest) {
     const {data,error}=result;
     if (email && error?.code === "PGRST202") return NextResponse.json({ error: "メール連絡先の保存準備中です。時間をおいて再度お試しください。" }, { status: 503 });
     if (error) return NextResponse.json({ error: error.message.includes("booking_window_closed") ? "受付を締め切りました。別の空き枠を選択してください。" : error.message.includes("time_slot_unavailable") ? "その枠は先に予約されました。もう一度お選びください。" : error.message.includes("outside_business_hours") ? "営業時間内の枠を選択してください。" : "予約を確定できませんでした。" }, { status: 409 });
-    return NextResponse.json({ reservation: data, managePath }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
+    const notification=email?await dispatchEmailBookingEvents(storeId,data.id):{pending:false};
+    return NextResponse.json({ reservation: data, managePath,notificationWarning:notification.pending?EMAIL_EVENT_WARNING:null }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ error: "予約を確定できませんでした。" }, { status: 500 }); }
 }

@@ -9,14 +9,15 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   await page.route('**/auth/v1/user*',route=>route.fulfill({status:200,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,OPTIONS'},contentType:'application/json',body:JSON.stringify(user)}));
   await page.route('**/api/admin/reservations?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({reservations:[],staff:[],hasMore:false,canManageSettings:true})}));
   await page.route('**/api/admin/booking-options',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({storeId:user.app_metadata.store_id,services:[],staff:[],links:[]})}));
-  let emailSettings=null;const emailActions=[];
+  let emailSettings=null;const emailActions=[];let emailPending=1;
   await page.route('**/api/admin/email-settings',async route=>{
    const body=route.request().method()==='POST'?route.request().postDataJSON():null;
    if(body){emailActions.push(body.action);if(body.action==='save')emailSettings={senderName:body.senderName,senderEmail:body.senderEmail,replyTo:body.replyTo,domain:'example.com',domainId:null,revision:'revision',status:'not_registered',records:[]};
     if(body.action==='register')emailSettings={...emailSettings,domainId:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',status:'not_started',records:[{type:'TXT',name:'resend._domainkey',value:'test-DNS-record',ttl:'Auto',status:'not_started'}]};
     if(body.action==='verify')emailSettings={...emailSettings,status:'verified'};
+    if(body.action==='retry')emailPending=0;
    }
-   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({settings:emailSettings,platformReady:true})});
+   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({settings:emailSettings,platformReady:true,events:{pending:emailPending,expired:0,rows:[{id:"event",reservationId:"reservation",kind:"created",state:emailPending?"pending":"sent",recipient:"customer@example.com",createdAt:"2030-01-01T00:00:00Z",customerName:"メールのお客様",startAt:"2030-01-02T01:15:00Z"}]},delivery:body?.action==="retry"?{sent:1,failed:0}:undefined})});
   });
   let enabled=false,sends=0;const actions=[];const dialogs=[];page.on('dialog',d=>dialogs.push(d.message()));
   let row={id:'77777777-7777-7777-7777-777777777777',startAt:'2030-01-02T01:15:00Z',customerName:'電話のお客様',phone:'09000000033',staffName:'担当',serviceName:'整体',state:'phone',channel:'phone',failed:false,sentAt:null,contactedAt:null};
@@ -42,6 +43,7 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   await page.getByRole('button',{name:'ドメインを登録',exact:true}).click();await page.getByRole('cell',{name:'test-DNS-record',exact:true}).waitFor();
   await page.getByRole('button',{name:'認証を確認',exact:true}).click();await page.getByRole('status').filter({hasText:'ドメインの認証を確認しました。'}).waitFor();
   assert.deepEqual(emailActions,['save','register','verify']);assert.equal(sends,0,'domain verification must not send notifications');
+  await page.getByRole('button',{name:'未送信の予約メールを再送',exact:true}).click();await page.getByRole('status').filter({hasText:'メール配信受付：1件'}).waitFor();await page.getByRole('cell',{name:'配信受付済み',exact:true}).waitFor();assert.equal(emailActions.at(-1),'retry');
   await page.getByRole('button',{name:'予約一覧',exact:true}).click();await page.getByRole('heading',{name:'予約一覧',exact:true,level:2}).waitFor();
   console.log('PASS '+width+'px reminder opt-in, phone contacts, saved status and navigation');await page.close();
  }

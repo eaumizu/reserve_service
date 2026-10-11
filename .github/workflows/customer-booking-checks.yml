@@ -62,11 +62,13 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0016_customer_staff_reschedule.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0017_booking_reminders.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0018_store_email_settings.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0019_email_booking_notifications.sql
           psql -v ON_ERROR_STOP=1 -f supabase/seed.sql
           psql -v ON_ERROR_STOP=1 -f tests/customer-booking-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/line-reservation-events-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/booking-reminders-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/store-email-db.sql
+          psql -v ON_ERROR_STOP=1 -f tests/email-booking-events-db.sql
       - name: Browser checks
         run: |
           npm install --no-save --no-audit --no-fund playwright

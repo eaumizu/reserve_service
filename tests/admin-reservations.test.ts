@@ -309,4 +309,4 @@ describe("admin reservations API", () => {
   });
 });
 
-it("returns cancellation success with a notification warning when LINE is unavailable",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});query.maybeSingle.mockResolvedValue({data:{id:reservationId,status:"cancelled"},error:null});notify.mockResolvedValue({pending:true});const r=await patch({reservationId,status:"cancelled"});expect(r.status).toBe(200);expect((await r.json()).notificationWarning).toBe("pending");expect(notify).toHaveBeenCalledWith("trusted",reservationId);});
+it("returns cancellation success with a notification warning when LINE is unavailable",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});query.maybeSingle.mockResolvedValue({data:{id:reservationId,status:"cancelled"},error:null});notify.mockResolvedValue({pending:true});const r=await patch({reservationId,status:"cancelled"});expect(r.status).toBe(200);expect((await r.json()).notificationWarning).toContain("通知に未送信");expect(notify).toHaveBeenCalledWith("trusted",reservationId);});

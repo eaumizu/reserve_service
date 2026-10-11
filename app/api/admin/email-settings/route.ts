@@ -1,3 +1,5 @@
+import {dispatchEmailBookingEvents} from "../../../../lib/email-booking-events";
+export const maxDuration=60;
 import {NextRequest,NextResponse} from "next/server";
 import {authorizeStaff} from "../../../../lib/admin-auth";
 import {supabaseServer} from "../../../../lib/supabase-server";
@@ -7,12 +9,14 @@ async function handle(request:NextRequest,write:boolean){
  try{
   const actor=await authorizeStaff(request.headers.get("authorization"));if(!actor)return respond({error:"ログインが必要です。"},401);
   if(actor.role!=="admin")return respond({error:"メール設定は管理者のみ操作できます。"},403);
-  let settings=await readEmailSettings(actor.storeId);
+  let settings=await readEmailSettings(actor.storeId);let delivery;
   if(write){
    let body;try{body=await request.json();}catch{return respond({error:"入力内容を確認してください。"},400);}
    if(!body||typeof body!=="object")return respond({error:"入力内容を確認してください。"},400);
    const db=supabaseServer();
-   if(body.action==="save"){
+   if(body.action==="retry"){
+    delivery=await dispatchEmailBookingEvents(actor.storeId,null,10);
+   }else if(body.action==="save"){
     let input;try{input=parseEmailSettings(body);}catch{return respond({error:"送信者名とメールアドレスを確認してください。送信元には店舗が管理する独自ドメインを使用してください。"},400);}
     const saved=await db.rpc("save_store_email_settings",{p_store_id:actor.storeId,p_settings:input});
     if(saved.error)return respond({error:"保存できません。このドメインが別店舗に登録済みでないか確認してください。"},409);
@@ -42,7 +46,8 @@ async function handle(request:NextRequest,write:boolean){
     settings=updated.data;
    }else return respond({error:"操作を確認してください。"},400);
   }
-  return respond({settings,platformReady:emailPlatformReady()});
+  const summary=await supabaseServer().rpc("email_booking_event_summary",{p_store_id:actor.storeId});
+  return respond({settings,platformReady:emailPlatformReady(),events:summary.error?null:summary.data,delivery});
  }catch{return respond({error:"メール設定を処理できません。0018のSQL・Resendの設定をご確認ください。登録処理が失敗した場合は運営にお問い合わせください。"},503);}
 }
 export async function GET(request:NextRequest){return handle(request,false);}
