@@ -1,0 +1,13 @@
+import {beforeEach,afterEach,it,expect,vi} from "vitest";
+const {rpc}=vi.hoisted(()=>({rpc:vi.fn()}));
+vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));
+import {parseEmailSettings,domainSnapshot,verifiedEmailSender} from "../lib/store-email";
+const config={senderName:"店舗",senderEmail:"booking@example.com",replyTo:"reply@gmail.com",domain:"example.com",domainId:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",revision:"rev",status:"verified",records:[]};
+beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("RESEND_API_KEY","test");vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response(JSON.stringify({id:config.domainId,name:config.domain,status:"verified",capabilities:{sending:"enabled"},records:[]}))));rpc.mockResolvedValue({data:config,error:null});});
+afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();});
+it("normalizes the sender domain and permits a Gmail reply address",()=>{expect(parseEmailSettings({...config,senderEmail:"booking@EXAMPLE.COM"})).toEqual({senderName:"店舗",senderEmail:"booking@example.com",replyTo:"reply@gmail.com",domain:"example.com"});});
+it("rejects sender injection and public domains",()=>{for(const input of [{senderName:'店舗\nBcc: x@example.com'},{senderEmail:'booking@gmail.com'},{senderEmail:'booking@-example.com'},{replyTo:'x@example.com\r\nBcc: x@example.com'}])expect(()=>parseEmailSettings({...config,...input})).toThrow();});
+it("never accepts another domain or disabled sending as verified",()=>{expect(()=>domainSnapshot({id:config.domainId,name:"other.com",status:"verified"},config)).toThrow();expect(domainSnapshot({id:config.domainId,name:config.domain,status:"verified",capabilities:{sending:"disabled"}},config).status).not.toBe("verified");});
+it("checks live verification on the trusted store before sending",async()=>{expect(await verifiedEmailSender("trusted")).toEqual(config);expect(rpc).toHaveBeenCalledWith("get_store_email_settings",{p_store_id:"trusted"});expect(fetch).toHaveBeenCalledWith(`https://api.resend.com/domains/${config.domainId}`,expect.objectContaining({method:"GET",redirect:"error"}));});
+it("refuses stale verification and provider failures",async()=>{vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({id:config.domainId,name:config.domain,status:"failed"})));await expect(verifiedEmailSender("trusted")).rejects.toThrow();vi.mocked(fetch).mockResolvedValue(new Response("private",{status:403}));await expect(verifiedEmailSender("trusted")).rejects.toThrow("provider");});
+it("does not query a domain for unverified stores",async()=>{rpc.mockResolvedValue({data:{...config,status:"pending"},error:null});await expect(verifiedEmailSender("trusted")).rejects.toThrow();expect(fetch).not.toHaveBeenCalled();});
