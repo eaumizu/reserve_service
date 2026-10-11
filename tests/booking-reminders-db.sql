@@ -1,0 +1,67 @@
+begin;
+do $test$
+declare s uuid:='11111111-1111-1111-1111-111111111111'; st uuid:='77777777-7777-7777-7777-777777777777';sv uuid:='44444444-4444-4444-4444-444444444444';
+ t timestamptz:=((clock_timestamp() at time zone 'Asia/Tokyo')::date+1+time '13:00') at time zone 'Asia/Tokyo';
+ a reservations;b reservations;c reservations;j jsonb;k jsonb; reminder_id uuid; n integer;
+begin
+ insert into staff(id,store_id,name) values(st,s,'リマインド確認');insert into staff_services values(st,sv);
+ a:=create_reservation_atomic(s,sv,st,t,'LINE対象','09000000031','phone',null);
+ b:=create_reservation_atomic(s,sv,st,t+interval '75 minutes','メール対象','09000000032','phone',null);
+ c:=create_reservation_atomic(s,sv,st,t+interval '150 minutes','電話対象','09000000033','phone',null);
+ update reservations set customer_email='test@example.com' where reservations.id=b.id;
+ insert into customer_line_links(reservation_id,store_id,line_user_id) values(a.id,s,'U'||repeat('d',32));
+ perform prepare_booking_reminders(s,true);
+ if exists(select 1 from booking_reminders where reservation_id in (a.id,b.id,c.id)) then raise exception 'default enabled';end if;
+ perform set_booking_reminders_enabled(s,true);perform prepare_booking_reminders(s,true);perform prepare_booking_reminders(s,true);
+ select count(*) into n from booking_reminders where reservation_id in(a.id,b.id,c.id) and state<>'obsolete';
+ if n<>3 then raise exception 'missing or duplicated reminders';end if;
+ if not exists(select 1 from booking_reminders where reservation_id=c.id and state='phone') then raise exception 'phone target missing';end if;
+ if not exists(select 1 from booking_reminders where reservation_id=b.id and channel='email') then raise exception 'email route missing';end if;
+ j:=claim_booking_reminder(s);if j->>'channel'<>'line' or j->>'recipient'<>'U'||repeat('d',32) then raise exception 'LINE routing wrong';end if;
+ k:=claim_booking_reminder(s);if k->>'channel'<>'email' then raise exception 'lease not exclusive';end if;
+ if claim_booking_reminder(s) is not null then raise exception 'duplicate claim';end if;
+ perform finish_booking_reminder('99999999-9999-9999-9999-999999999999',(j->>'id')::uuid,(j->>'leaseId')::uuid,true);
+ if not exists(select 1 from booking_reminders where id=(j->>'id')::uuid and state='sending') then raise exception 'cross store finish';end if;
+ perform finish_booking_reminder(s,(j->>'id')::uuid,(j->>'leaseId')::uuid,true);
+ perform finish_booking_reminder(s,(k->>'id')::uuid,(k->>'leaseId')::uuid,false);
+ update booking_reminders set lease_until=clock_timestamp()-interval '1 second' where id=(k->>'id')::uuid;
+ j:=claim_booking_reminder(s);if j->>'id'<>k->>'id' or j->>'leaseId'=k->>'leaseId' then raise exception 'retry changed key or lease unchanged';end if;
+ perform finish_booking_reminder(s,(k->>'id')::uuid,(k->>'leaseId')::uuid,true);
+ if not exists(select 1 from booking_reminders where id=(j->>'id')::uuid and state='sending') then raise exception 'stale lease completion';end if;
+ update reservations set status='cancelled' where reservations.id=b.id;
+ if not exists(select 1 from booking_reminders where id=(j->>'id')::uuid and state='obsolete') then raise exception 'cancel not invalidated';end if;
+ select q.id into reminder_id from booking_reminders q where q.reservation_id=c.id and q.state='phone';
+ begin
+ perform record_reminder_contact('99999999-9999-9999-9999-999999999999',reminder_id,st);raise exception 'expected wrong-store rejection';
+ exception when others then if sqlerrm<>'reminder_changed' then raise;end if;end;
+ perform record_reminder_contact(s,reminder_id,st);
+ if not exists(select 1 from booking_reminders where booking_reminders.id=reminder_id and state='contacted') then raise exception 'contact not recorded';end if;
+ update reservations set staff_id='22222222-2222-2222-2222-222222222223' where reservations.id=c.id;
+ if not exists(select 1 from booking_reminders where booking_reminders.id=reminder_id and state='obsolete') then raise exception 'changed contact shown as current';end if;
+ perform prepare_booking_reminders(s,false);
+ if not exists(select 1 from booking_reminders where reservation_id=c.id and state='phone') then raise exception 'new contact target missing';end if;
+ update reservations set status='confirmed' where reservations.id=b.id;
+ perform prepare_booking_reminders(s,false);
+ if not exists(select 1 from booking_reminders where reservation_id=b.id and state='phone' and channel='phone') then raise exception 'unconfigured email did not fall back to phone';end if;
+ update reservations set staff_id='22222222-2222-2222-2222-222222222223' where reservations.id=a.id;
+ perform prepare_booking_reminders(s,false);
+ if (select count(*) from booking_reminders where reservation_id=a.id and state='pending')<>1 then raise exception 'changed sent reminder did not refresh';end if;
+ update booking_reminders set first_attempt_at=clock_timestamp()-interval '24 hours' where reservation_id=a.id and state='pending';
+ perform prepare_booking_reminders(s,false);
+ if not exists(select 1 from booking_reminders where reservation_id=a.id and state='phone' and failed) then raise exception 'expired retry key still automatic';end if;
+ if claim_booking_reminder(s) is not null then raise exception 'expired reminder claimed';end if;
+ -- A job that was never attempted yesterday must become a phone task, not wait forever.
+ update reservations set customer_email='test@example.com',start_at=clock_timestamp()+interval '1 minute',end_at=clock_timestamp()+interval '61 minutes' where reservations.id=c.id;
+ select r.start_at into t from reservations r where r.id=c.id;
+ if (t at time zone 'Asia/Tokyo')::date=(clock_timestamp() at time zone 'Asia/Tokyo')::date then
+  insert into booking_reminders(store_id,reservation_id,start_at,channel,recipient,payload,state)
+  values(s,c.id,t,'email','test@example.com','{}'::jsonb,'pending');
+  perform prepare_booking_reminders(s,false);
+  if not exists(select 1 from booking_reminders where reservation_id=c.id and start_at=t and state='phone' and failed) then raise exception 'yesterday unsent stayed pending';end if;
+ end if;
+ if has_table_privilege('anon','booking_reminders','select') or has_function_privilege('authenticated','claim_booking_reminder(uuid)','execute') then raise exception 'reminder privileges leaked';end if;
+ if jsonb_array_length(booking_reminder_dashboard('99999999-9999-9999-9999-999999999999',true)->'rows')<>0 then raise exception 'dashboard tenant leak';end if;
+ perform set_booking_reminders_enabled(s,false);
+ if claim_booking_reminder(s) is not null then raise exception 'disabled store sending';end if;
+end $test$;
+rollback;
