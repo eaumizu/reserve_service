@@ -44,6 +44,7 @@ export function AdminReminders({auth,onBusy}:{auth:SupabaseClient;onBusy:(value:
    {!data.emailReady&&<p>メールの自動送信は未設定です。LINE未連携の方は電話連絡の対象になります。メールを使う場合は配信サービスの設定が必要です。</p>}
    {data.canManage&&<div className="grid"><button disabled={busy} onClick={()=>{if(window.confirm(data.enabled?"この店舗の前日通知を停止しますか？":"前日通知を有効にしますか？設定済みのLINE・メールからお客様へ通知します。"))void run({action:"enable",enabled:!data.enabled});}}>{data.enabled?"前日通知を停止":"前日通知を有効にする"}</button>
    <button disabled={busy||!data.enabled} onClick={()=>{if(window.confirm("明日の予約の未送信通知を送信しますか？"))void run({action:"send"});}}>{busy?"処理中…":"未送信の前日通知を送信・再送"}</button></div>}
+   <p className="muted">朝の自動処理後に入った翌日予約は、この画面から未送信通知を送信してください。</p>
    <p className="muted">一度の処理で送りきれなかった通知は「通知待ち」に残ります。失敗した通知は約2分後に再送できます。</p>
    {!data.rows.length?<p>対象の予約はありません。通知を停止している場合は新しい連絡対象を作成しません。</p>:<div style={{overflowX:"auto"}}><table className="admin-table"><thead><tr><th>予約日時</th><th>お客様・連絡先</th><th>施術・担当</th><th>通知方法</th><th>連絡状況</th><th>操作</th></tr></thead><tbody>{data.rows.map(row=><tr key={row.id}>
     <td>{japan(row.startAt)}</td><td>{row.customerName}<br/>{row.phone?<a href={`tel:${row.phone.replace(/[^+0-9]/g,"")}`}>{row.phone}</a>:"電話番号なし"}</td>

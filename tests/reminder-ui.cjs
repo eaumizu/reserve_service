@@ -25,7 +25,7 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   assert.equal(sends,0,'opening contact list must never send');
   assert.equal(await page.getByRole('button',{name:'未送信の前日通知を送信・再送',exact:true}).isDisabled(),true);
   await page.getByRole('button',{name:'前日通知を有効にする',exact:true}).click();await page.getByRole('button',{name:'前日通知を停止',exact:true}).waitFor().catch(async e=>{console.log(JSON.stringify({enabled,actions,dialogs,errors,text:(await page.locator('body').innerText()).slice(-2500)}));throw e;});
-  await page.getByRole('button',{name:'電話で連絡済みにする',exact:true}).click();await page.getByText('電話で連絡済み',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'電話で連絡済みにする',exact:true}).click();await page.getByRole('cell',{name:/^電話で連絡済み/}).waitFor();
   assert.equal(await page.getByRole('button',{name:'電話で連絡済みにする',exact:true}).count(),0);assert.equal(sends,0);assert.deepEqual(errors,[]);
   await page.getByRole('button',{name:'予約一覧',exact:true}).click();await page.getByRole('heading',{name:'予約一覧',exact:true}).waitFor();
   console.log('PASS '+width+'px reminder opt-in, phone contacts, saved status and navigation');await page.close();
