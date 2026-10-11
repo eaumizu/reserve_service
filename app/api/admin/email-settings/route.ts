@@ -30,8 +30,12 @@ async function handle(request:NextRequest,write:boolean){
     }else{
      if(!settings.domainId)return respond({error:"先にドメインを登録してください。"},409);
      const path=`/${encodeURIComponent(settings.domainId)}`;
-     await resendDomain(`${path}/verify`,"POST");
+     // Verification restarts asynchronously and resets even verified domains to pending.
      snapshot=domainSnapshot(await resendDomain(path),settings);
+     if(snapshot.status==="not_started"||snapshot.status==="failed"){
+      await resendDomain(`${path}/verify`,"POST");
+      snapshot=domainSnapshot(await resendDomain(path),settings);
+     }
     }
     const updated=await db.rpc("update_store_email_verification",{p_store_id:actor.storeId,p_revision:settings.revision,p_result:snapshot});
     if(updated.error||!updated.data)return respond({error:"設定が変更されました。再読み込みしてください。"},409);
