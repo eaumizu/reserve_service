@@ -1,4 +1,6 @@
 begin;
+insert into store_email_settings(store_id,sender_name,sender_email,domain,domain_id,status) values('11111111-1111-1111-1111-111111111111','店舗','booking@example.com','example.com','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','verified');
+
 do $test$
 declare s uuid:='11111111-1111-1111-1111-111111111111'; st uuid:='77777777-7777-7777-7777-777777777777';sv uuid:='44444444-4444-4444-4444-444444444444';
  t timestamptz:=((clock_timestamp() at time zone 'Asia/Tokyo')::date+1+time '13:00') at time zone 'Asia/Tokyo';

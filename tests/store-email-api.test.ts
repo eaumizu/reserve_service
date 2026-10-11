@@ -1,0 +1,17 @@
+import {beforeEach,afterEach,it,expect,vi} from "vitest";
+import {NextRequest} from "next/server";
+const {auth,rpc}=vi.hoisted(()=>({auth:vi.fn(),rpc:vi.fn()}));
+vi.mock("../lib/admin-auth",()=>({authorizeStaff:auth}));vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));
+import {GET,POST} from "../app/api/admin/email-settings/route";
+const domainId="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const settings={senderName:"店舗",senderEmail:"booking@example.com",replyTo:"",domain:"example.com",domainId:null as string|null,revision:"revision",status:"not_registered",records:[]};
+const req=(body?:unknown)=>new NextRequest("http://localhost/api/admin/email-settings",{method:body?"POST":"GET",headers:{authorization:"Bearer test"},...(body?{body:JSON.stringify(body)}:{})});
+beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("RESEND_API_KEY","test");auth.mockResolvedValue({storeId:"trusted",role:"admin"});rpc.mockImplementation(async(name:string)=>({data:name==="begin_store_email_registration"?true:settings,error:null}));vi.stubGlobal("fetch",vi.fn().mockImplementation(async()=>new Response(JSON.stringify({id:domainId,name:settings.domain,status:"not_started",records:[]}))));});
+afterEach(()=>{vi.unstubAllEnvs();vi.unstubAllGlobals();});
+it("requires admin authentication even to read",async()=>{auth.mockResolvedValue(null);expect((await GET(req())).status).toBe(401);auth.mockResolvedValue({role:"staff",storeId:"trusted"});expect((await GET(req())).status).toBe(403);expect(rpc).not.toHaveBeenCalled();});
+it("GET is private and never registers or verifies",async()=>{const r=await GET(req());expect(r.headers.get("cache-control")).toBe("private, no-store");expect(fetch).not.toHaveBeenCalled();});
+it("ignores the submitted tenant and verification state",async()=>{expect((await POST(req({...settings,action:"save",storeId:"other",status:"verified",domainId}))).status).toBe(200);expect(rpc).toHaveBeenCalledWith("save_store_email_settings",{p_store_id:"trusted",p_settings:{senderName:"店舗",senderEmail:"booking@example.com",replyTo:"",domain:"example.com"}});});
+it("registers once without adopting an existing domain",async()=>{expect((await POST(req({action:"register"}))).status).toBe(200);expect(fetch).toHaveBeenCalledTimes(1);expect(rpc).toHaveBeenCalledWith("update_store_email_verification",expect.objectContaining({p_store_id:"trusted",p_revision:"revision",p_result:expect.objectContaining({domainId,status:"not_started"})}));});
+it("does not register when the lock is already claimed",async()=>{rpc.mockImplementation(async(name:string)=>({data:name==="begin_store_email_registration"?false:settings,error:null}));expect((await POST(req({action:"register"}))).status).toBe(409);expect(fetch).not.toHaveBeenCalled();});
+it("does not disclose provider credentials or errors",async()=>{vi.mocked(fetch).mockRejectedValue(new Error("private credential"));const r=await POST(req({action:"register"}));expect(r.status).toBe(503);expect(await r.text()).not.toContain("private credential");});
+it("checks only the stored domain ID, never a caller-supplied ID",async()=>{rpc.mockResolvedValue({data:{...settings,domainId},error:null});expect((await POST(req({action:"verify",domainId:"other"}))).status).toBe(200);expect(fetch).toHaveBeenCalledWith(`https://api.resend.com/domains/${domainId}/verify`,expect.objectContaining({method:"POST"}));});

@@ -25,7 +25,8 @@ async function handle(request:NextRequest,write:boolean){
    }else return respond({error:"操作を確認してください。"},400);
   }
   const dashboard=await db.rpc("booking_reminder_dashboard",{p_store_id:staff.storeId,p_email_ready:reminderEmailReady()});if(dashboard.error)throw dashboard.error;
-  return respond({...dashboard.data,emailReady:reminderEmailReady(),cronReady:(process.env.CRON_SECRET?.length??0)>=32,canManage:staff.role==="admin",delivery});
+  const email=await db.rpc("store_email_ready",{p_store_id:staff.storeId});if(email.error)throw email.error;
+  return respond({...dashboard.data,emailReady:reminderEmailReady()&&email.data===true,cronReady:(process.env.CRON_SECRET?.length??0)>=32,canManage:staff.role==="admin",delivery});
  }catch{return respond({error:"前日連絡を取得できません。0017のSQLと通知設定をご確認ください。"},503);}
 }
 export async function GET(request:NextRequest){return handle(request,false);}

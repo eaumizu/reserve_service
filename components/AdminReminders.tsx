@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
 import type {SupabaseClient} from "@supabase/supabase-js";
+import {AdminEmailSettings} from "./AdminEmailSettings";
 type Row={id:string;startAt:string;customerName:string;phone:string;serviceName:string;staffName:string;channel:string;state:string;failed:boolean;sentAt:string|null;contactedAt:string|null};
 type Dashboard={enabled:boolean;emailReady:boolean;cronReady:boolean;canManage:boolean;rows:Row[];delivery?:{sent:number;failed:number}};
 const japan=(value:string)=>new Date(value).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"});
@@ -41,7 +42,7 @@ export function AdminReminders({auth,onBusy}:{auth:SupabaseClient;onBusy:(value:
   {!data?<p>前日連絡を読み込んでいます…</p>:<>
    <p>店舗の前日通知：<strong>{data.enabled?"有効":"停止中"}</strong></p>
    {!data.cronReady&&<p>自動実行の認証設定が未完了です。VercelにCRON_SECRETを設定して再デプロイしてください。</p>}
-   {!data.emailReady&&<p>メールの自動送信は未設定です。LINE未連携の方は電話連絡の対象になります。メールを使う場合は配信サービスの設定が必要です。</p>}
+   {!data.emailReady&&<p>メールの自動送信は未設定です。LINE未連携の方は電話連絡の対象になります。下の店舗メール設定で送信元を登録・認証してください。</p>}
    {data.canManage&&<div className="grid"><button disabled={busy} onClick={()=>{if(window.confirm(data.enabled?"この店舗の前日通知を停止しますか？":"前日通知を有効にしますか？設定済みのLINE・メールからお客様へ通知します。"))void run({action:"enable",enabled:!data.enabled});}}>{data.enabled?"前日通知を停止":"前日通知を有効にする"}</button>
    <button disabled={busy||!data.enabled} onClick={()=>{if(window.confirm("明日の予約の未送信通知を送信しますか？"))void run({action:"send"});}}>{busy?"処理中…":"未送信の前日通知を送信・再送"}</button></div>}
    <p className="muted">朝の自動処理後に入った翌日予約は、この画面から未送信通知を送信してください。</p>
@@ -52,6 +53,7 @@ export function AdminReminders({auth,onBusy}:{auth:SupabaseClient;onBusy:(value:
     <td>{reminderStateLabel(row)}{(row.sentAt||row.contactedAt)&&<p>{japan((row.sentAt||row.contactedAt)!)}</p>}</td>
     <td>{(row.state==="phone"||(row.state==="pending"&&row.failed))&&<button disabled={busy} onClick={()=>{if(window.confirm(`${row.customerName}様に電話で予約をお伝えできましたか？不在・留守番電話の場合は連絡済みにせず、そのまま残してください。`))void run({action:"contacted",id:row.id});}}>電話で連絡済みにする</button>}</td>
    </tr>)}</tbody></table></div>}
+   {data.canManage&&<AdminEmailSettings auth={auth} onBusy={onBusy}/>}
    <p className="muted">表示は200件までです。LINE連携や電話での連絡は必須ではなく、LINEなし・メールなしでも予約できます。</p>
   </>}
  </section>;
