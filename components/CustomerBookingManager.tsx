@@ -36,7 +36,7 @@ export function CustomerBookingManager(){
   async function save(action:"cancel"|"reschedule"){
     if(!booking||inFlight.current)return;inFlight.current=true;setBusy(true);setError("");setSuccess("");
     try{const result=await request({action,expectedUpdatedAt:booking.updatedAt,...(action==="reschedule"?{startAt:start}:{})});
-      setBooking(result.booking);setMode("view");setSlots([]);setStart("");setSuccess(action==="cancel"?"予約をキャンセルしました。":"予約日時を変更しました。");}
+      setBooking(result.booking);setMode("view");setSlots([]);setStart("");if(result.notificationWarning)setError(result.notificationWarning);setSuccess(action==="cancel"?"予約をキャンセルしました。":"予約日時を変更しました。");}
     catch(e){setError(e instanceof Error?e.message:"通信エラーです。予約を再読み込みして結果をご確認ください。");}
     finally{setBusy(false);inFlight.current=false;}
   }

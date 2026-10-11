@@ -24,6 +24,11 @@ export function AdminLineSettings({auth,onBusy}:{auth:SupabaseClient;onBusy:(bus
     catch(e){setError(e instanceof Error?e.message:"接続確認できませんでした。");}
     finally{setBusy(false);onBusy(false);inFlight.current=false;}
   }
+  async function retryNotifications(){
+    if(inFlight.current)return;inFlight.current=true;setBusy(true);onBusy(true);setError("");setSuccess("");
+    try{const data=await request({method:"POST"},"/api/admin/line-settings/notifications");setSuccess(`未送信の変更・キャンセル通知：${data.pending}件。送信期限超過：${data.expired}件。`+(data.retryPending?"未送信が残っています。認証情報・LINEの配信上限を確認し、時間を置いて再送してください。":""));}
+    catch(e){setError(e instanceof Error?e.message:"通知を確認できません。");}finally{inFlight.current=false;setBusy(false);onBusy(false);}
+  }
   async function save(){
     if(!settings||inFlight.current)return;inFlight.current=true;setBusy(true);onBusy(true);setError("");setSuccess("");setConnection(undefined);
     try{setSettings(await request({method:"POST",body:JSON.stringify({accountName:settings.accountName,friendUrl:settings.friendUrl,
@@ -43,6 +48,8 @@ export function AdminLineSettings({auth,onBusy}:{auth:SupabaseClient;onBusy:(bus
       <button disabled={busy||!settings.hasAccessToken||!settings.encryptionReady} onClick={()=>void check()}>LINEの接続確認</button>
       {connection&&<p role="status">接続できました：{connection.displayName}（{connection.premiumId??connection.basicId}）。これは接続確認のみで、通知は送信しません。</p>}</>}
     {settings?.storeId&&origin&&<label>LINE Developersに登録するWebhook URL<input readOnly value={`${origin}/api/line/webhook/${settings.storeId}`} onFocus={e=>e.target.select()}/></label>}
+    <p>変更・キャンセル通知には0015のSQL適用が必要です。送信に失敗した場合は、以下から再送できます。1回に最大2件を処理します。送信期限を過ぎた通知はLINE以外の方法で連絡してください。</p>
+    <button disabled={busy} onClick={()=>void retryNotifications()}>未送信LINE通知を再送</button>
     {settings&&<form onSubmit={e=>{e.preventDefault();void save();}}><fieldset disabled={busy} style={{border:0,padding:0}}>
       <label>公式アカウント名<input maxLength={100} value={settings.accountName} onChange={e=>setSettings({...settings,accountName:e.target.value})}/></label>
       <label>友だち追加URL<input type="url" maxLength={500} placeholder="https://lin.ee/…" value={settings.friendUrl} onChange={e=>setSettings({...settings,friendUrl:e.target.value})}/></label>
