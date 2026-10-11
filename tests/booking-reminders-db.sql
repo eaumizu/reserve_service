@@ -50,6 +50,15 @@ begin
  perform prepare_booking_reminders(s,false);
  if not exists(select 1 from booking_reminders where reservation_id=a.id and state='phone' and failed) then raise exception 'expired retry key still automatic';end if;
  if claim_booking_reminder(s) is not null then raise exception 'expired reminder claimed';end if;
+ -- A job that was never attempted yesterday must become a phone task, not wait forever.
+ update reservations set customer_email='test@example.com',start_at=clock_timestamp()+interval '1 minute',end_at=clock_timestamp()+interval '61 minutes' where reservations.id=c.id;
+ select r.start_at into t from reservations r where r.id=c.id;
+ if (t at time zone 'Asia/Tokyo')::date=(clock_timestamp() at time zone 'Asia/Tokyo')::date then
+  insert into booking_reminders(store_id,reservation_id,start_at,channel,recipient,payload,state)
+  values(s,c.id,t,'email','test@example.com','{}'::jsonb,'pending');
+  perform prepare_booking_reminders(s,false);
+  if not exists(select 1 from booking_reminders where reservation_id=c.id and start_at=t and state='phone' and failed) then raise exception 'yesterday unsent stayed pending';end if;
+ end if;
  if has_table_privilege('anon','booking_reminders','select') or has_function_privilege('authenticated','claim_booking_reminder(uuid)','execute') then raise exception 'reminder privileges leaked';end if;
  if jsonb_array_length(booking_reminder_dashboard('99999999-9999-9999-9999-999999999999',true)->'rows')<>0 then raise exception 'dashboard tenant leak';end if;
  perform set_booking_reminders_enabled(s,false);

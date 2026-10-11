@@ -41,7 +41,8 @@ begin
  update booking_reminders j set state='phone',failed=true,lease_id=null,lease_until=null
  where (p_store_id is null or j.store_id=p_store_id) and j.state in ('pending','sending')
  and (j.lease_until is null or j.lease_until<clock_timestamp())
- and j.first_attempt_at<clock_timestamp()-interval '23 hours';
+ and (j.first_attempt_at<clock_timestamp()-interval '23 hours'
+ or (j.start_at at time zone 'Asia/Tokyo')::date<tomorrow);
  update booking_reminders j set state='obsolete',lease_id=null,lease_until=null
  where (p_store_id is null or j.store_id=p_store_id) and j.state in ('pending','sending','phone')
  and exists(select 1 from reservations r where r.id=j.reservation_id and
