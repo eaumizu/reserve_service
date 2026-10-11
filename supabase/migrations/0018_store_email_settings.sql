@@ -21,7 +21,7 @@ declare old_settings store_email_settings;
 begin
  -- Serialise settings and registration changes for the same store.
  perform 1 from stores where id=p_store_id for update;
- select * into old_settings from store_email_settings where store_id=p_store_id;
+ select * into old_settings from store_email_settings where store_id=p_store_id for update;
  if p_settings->>'senderName' is null or p_settings->>'senderEmail' is null or p_settings->>'domain' is null
  or split_part(p_settings->>'senderEmail','@',2)<>p_settings->>'domain' then raise exception 'invalid_sender'; end if;
  if old_settings.status='registering' then
