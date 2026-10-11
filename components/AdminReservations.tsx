@@ -2,7 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import {AdminReminders} from "./AdminReminders";
+import {AdminContacts} from "./AdminContacts";
 import { AdminBookingForm } from "./AdminBookingForm";
 import { AdminRescheduleForm } from "./AdminRescheduleForm";
 import { AdminStoreSettings } from "./AdminStoreSettings";
@@ -214,10 +214,10 @@ export function AdminReservations() {
           <button className={showSettings ? "selected" : ""} disabled={busy} onClick={() => { if (showSettings) { void switchView("list"); return; } setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowReminders(false); setShowBlocks(false); setShowSettings(true); }}> {showSettings ? "予約一覧に戻る" : "店舗設定"} </button>
           <button className={showBlocks ? "selected" : ""} disabled={busy} onClick={() => { if (showBlocks) { void switchView("list"); return; } setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowReminders(false); setShowSettings(false); setShowBlocks(true); }}> {showBlocks ? "予約一覧に戻る" : "受付停止・臨時休業"} </button>
         </>}
-        <button className={showReminders?"selected":""} disabled={busy} onClick={()=>{setStatusTarget(null);setChangeTarget(null);setDetailTarget(null);setShowSettings(false);setShowBlocks(false);setShowReminders(true);}}>前日連絡</button>
+        <button className={showReminders?"selected":""} disabled={busy} onClick={()=>{setStatusTarget(null);setChangeTarget(null);setDetailTarget(null);setShowSettings(false);setShowBlocks(false);setShowReminders(true);}}>連絡管理</button>
         <button disabled={busy} onClick={logout}>ログアウト</button>
       </div>
-      {showReminders ? <AdminReminders auth={auth} onBusy={setBusy}/> : showSettings && canManageSettings ? <AdminStoreSettings auth={auth} onBusy={setBusy} /> : showBlocks && canManageSettings ? <AdminAvailabilityBlocks auth={auth} onBusy={setBusy} /> : <>
+      {showReminders ? <AdminContacts auth={auth} onBusy={setBusy}/> : showSettings && canManageSettings ? <AdminStoreSettings auth={auth} onBusy={setBusy} /> : showBlocks && canManageSettings ? <AdminAvailabilityBlocks auth={auth} onBusy={setBusy} /> : <>
       {changeTarget && <dialog ref={changeDialogRef} className="reservation-change-dialog" aria-label="予約日時・担当者の変更"
         onCancel={event => { event.preventDefault(); if (!busy) setChangeTarget(null); }}>
         <button type="button" className="dialog-close" disabled={busy} onClick={() => setChangeTarget(null)}>変更画面を閉じる</button>

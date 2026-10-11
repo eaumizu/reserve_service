@@ -1,0 +1,14 @@
+import {beforeEach,it,expect,vi} from "vitest";
+import {NextRequest} from "next/server";
+const {auth,rpc,email,line}=vi.hoisted(()=>({auth:vi.fn(),rpc:vi.fn(),email:vi.fn(),line:vi.fn()}));
+vi.mock("../lib/admin-auth",()=>({authorizeStaff:auth}));vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));vi.mock("../lib/booking-reminders",()=>({reminderEmailReady:()=>true}));vi.mock("../lib/email-booking-events",()=>({dispatchEmailBookingEvents:email}));vi.mock("../lib/line-reservation-events",()=>({dispatchLineReservationEvents:line}));
+import {GET,POST} from "../app/api/admin/contacts/route";
+const row={id:"event",channel:"email",reservationId:"trusted-reservation",canRetry:true,canContact:true};
+const req=(body?:unknown)=>new NextRequest("http://localhost/api/admin/contacts",{method:body?"POST":"GET",...(body?{body:JSON.stringify(body)}:{})});
+beforeEach(()=>{vi.resetAllMocks();auth.mockResolvedValue({storeId:"trusted",userId:"actor",role:"admin"});rpc.mockResolvedValue({data:{events:[row],reminders:[]},error:null});email.mockResolvedValue({pending:false});});
+it("requires authentication",async()=>{auth.mockResolvedValue(null);expect((await GET(req())).status).toBe(401);expect(rpc).not.toHaveBeenCalled();});
+it("never sends on GET and scopes data to the actor",async()=>{const r=await GET(req());expect(r.headers.get('cache-control')).toBe('private, no-store');expect(rpc).toHaveBeenCalledWith('booking_contact_dashboard',{p_store_id:'trusted',p_email_ready:true});expect(email).not.toHaveBeenCalled();expect(line).not.toHaveBeenCalled();});
+it("uses trusted reservation and tenant for retry",async()=>{expect((await POST(req({action:'retry',id:'event',channel:'email',storeId:'other',reservationId:'other'}))).status).toBe(200);expect(email).toHaveBeenCalledWith('trusted','trusted-reservation');});
+it("rejects another store's event",async()=>{expect((await POST(req({action:'retry',id:'other',channel:'email'}))).status).toBe(409);expect(email).not.toHaveBeenCalled();});
+it("staff cannot retry but can record a phone contact",async()=>{auth.mockResolvedValue({storeId:'trusted',userId:'actor',role:'staff'});expect((await POST(req({action:'retry',id:'event',channel:'email'}))).status).toBe(403);expect((await POST(req({action:'contacted',id:'event',channel:'email',userId:'other'}))).status).toBe(200);expect(rpc).toHaveBeenCalledWith('record_booking_event_contact',{p_store_id:'trusted',p_channel:'email',p_event_id:'event',p_user_id:'actor'});});
+it("blocks contact changes while sending",async()=>{rpc.mockResolvedValue({data:{events:[{...row,canContact:false}]},error:null});expect((await POST(req({action:'contacted',id:'event',channel:'email'}))).status).toBe(409);});
