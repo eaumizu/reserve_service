@@ -37,7 +37,7 @@ export function CustomerLineLink(){
  return <section aria-label="LINEとの予約連携"><h3>LINEと予約を連携する（任意）</h3>
  <p>LINEを使わなくても予約を操作できます。友だち追加だけでは予約との連携は完了しません。店舗の「トーク」を開き、入力済みの文章を送信してください。コードは他の方に共有しないでください。</p>
  {error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status">{notice}</p>}
- {linked?<p role="status">この予約はLINEと連携済みです。予約通知は今後追加予定です。</p>:<>
+ {linked?<p role="status">この予約はLINEと連携済みです。新しく連携した予約には、予約日時と専用リンクをLINEへお送りします。</p>:<>
  {code&&<p>友だち追加はできましたか？連携を完了するには、下のボタンからトークを開き、送信ボタンを押してください。</p>}
  <button disabled={busy} onClick={()=>void openChat()}>{busy?"確認中…":code?"トークを開いて連携を完了":"LINEを開いて予約を連携"}</button>
  {code&&<><p>発行したコードは10分間有効です。期限切れの場合は上のボタンで新しいコードを発行します。</p>

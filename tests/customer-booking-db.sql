@@ -31,6 +31,16 @@ begin
     perform manage_customer_booking_atomic(repeat('a',64),'cancel',original.updated_at,null);
     raise exception 'expected stale version failure';
   exception when others then if sqlerrm<>'booking_changed' then raise; end if; end;
+  perform issue_customer_line_notification_code(repeat('a',64),repeat('9',64),'encrypted-test-token');
+  if consume_customer_line_notification_code('99999999-9999-9999-9999-999999999999',repeat('9',64),'U'||repeat('a',32)) is not null then raise exception 'wrong store notification'; end if;
+  result:=consume_customer_line_notification_code(store,repeat('9',64),'U'||repeat('a',32));
+  if result->>'tokenCipher'<>'encrypted-test-token' or result->>'userId'<>'U'||repeat('a',32) then raise exception 'notification projection wrong'; end if;
+  if consume_customer_line_notification_code(store,repeat('9',64),'U'||repeat('b',32)) is not null then raise exception 'wrong recipient retry'; end if;
+  if consume_customer_line_notification_code(store,repeat('9',64),'U'||repeat('a',32))->>'retryKey'<>result->>'retryKey' then raise exception 'retry key changed'; end if;
+  perform mark_line_booking_notification_sent(store,repeat('9',64),(result->>'retryKey')::uuid);
+  if consume_customer_line_notification_code(store,repeat('9',64),'U'||repeat('a',32)) is not null then raise exception 'sent job returned'; end if;
+  if exists(select 1 from line_booking_notifications where code_hash=repeat('9',64) and booking_token_cipher is not null) then raise exception 'sent cipher retained'; end if;
+  delete from customer_line_links where reservation_id=original.id;
   perform issue_customer_line_code(repeat('a',64),repeat('e',64));
   perform issue_customer_line_code(repeat('a',64),repeat('f',64));
   if consume_customer_line_code(store,repeat('e',64),'U'||repeat('a',32)) then raise exception 'old code accepted'; end if;

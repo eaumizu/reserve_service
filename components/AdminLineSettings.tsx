@@ -28,7 +28,7 @@ export function AdminLineSettings({auth,onBusy}:{auth:SupabaseClient;onBusy:(bus
     if(!settings||inFlight.current)return;inFlight.current=true;setBusy(true);onBusy(true);setError("");setSuccess("");setConnection(undefined);
     try{setSettings(await request({method:"POST",body:JSON.stringify({accountName:settings.accountName,friendUrl:settings.friendUrl,
       channelId:settings.channelId,expectedVersion:settings.version,accessToken,channelSecret,clearCredentials:clear})}));
-      setAccessToken("");setChannelSecret("");setClear(false);setSuccess("LINE設定を保存しました。自動通知はまだ有効になっていません。");}
+      setAccessToken("");setChannelSecret("");setClear(false);setSuccess("LINE設定を保存しました。予約連携時の通知には0014のSQL適用とWebhookの有効化が必要です。");}
     catch(e){setError(e instanceof Error?e.message:"保存できませんでした。");}finally{setBusy(false);onBusy(false);inFlight.current=false;}
   }
   async function reload(){if(inFlight.current)return;inFlight.current=true;setBusy(true);onBusy(true);setError("");setSuccess("");setConnection(undefined);
@@ -36,12 +36,12 @@ export function AdminLineSettings({auth,onBusy}:{auth:SupabaseClient;onBusy:(bus
     finally{setBusy(false);onBusy(false);inFlight.current=false;}}
   return <section className="card" aria-label="店舗のLINE連携設定"><h2>店舗のLINE連携設定</h2>
     <p>この店舗の公式アカウントを登録できます。保存済みの秘密情報は表示しません。</p>
-    <p>設定の保存・接続確認と、お客様の予約確認ページからの連携コード発行に対応しています。Webhook URLをLINE Developersへ登録し、Webhookの利用を有効にしてください。自動通知は今後追加します。Webの予約操作はLINE登録なしで利用できます。</p>
+    <p>設定の保存・接続確認と、お客様の予約確認ページからの連携コード発行に対応しています。Webhook URLをLINE Developersへ登録し、Webhookの利用を有効にしてください。予約との連携完了時に、予約日時と専用リンクをLINEへ送信します。0014のSQLを適用し、Webhookの再送も有効にしてください。Webの予約操作はLINE登録なしで利用できます。</p>
     {error&&<p className="error" role="alert">{error}</p>}{success&&<p role="status">{success}</p>}
     <button disabled={busy} onClick={reload}>LINE設定を再読み込み（未保存の入力は戻ります）</button>
     {settings&&<><p>接続確認は保存済みのアクセストークンを使います。メッセージは送信しません。表示されたアカウント名・IDが店舗のものか確認してください。チャネルシークレットの検証は含みません。</p>
       <button disabled={busy||!settings.hasAccessToken||!settings.encryptionReady} onClick={()=>void check()}>LINEの接続確認</button>
-      {connection&&<p role="status">接続できました：{connection.displayName}（{connection.premiumId??connection.basicId}）。自動通知はまだ有効になっていません。</p>}</>}
+      {connection&&<p role="status">接続できました：{connection.displayName}（{connection.premiumId??connection.basicId}）。これは接続確認のみで、通知は送信しません。</p>}</>}
     {settings?.storeId&&origin&&<label>LINE Developersに登録するWebhook URL<input readOnly value={`${origin}/api/line/webhook/${settings.storeId}`} onFocus={e=>e.target.select()}/></label>}
     {settings&&<form onSubmit={e=>{e.preventDefault();void save();}}><fieldset disabled={busy} style={{border:0,padding:0}}>
       <label>公式アカウント名<input maxLength={100} value={settings.accountName} onChange={e=>setSettings({...settings,accountName:e.target.value})}/></label>
