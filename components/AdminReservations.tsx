@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import {AdminReminders} from "./AdminReminders";
 import { AdminBookingForm } from "./AdminBookingForm";
 import { AdminRescheduleForm } from "./AdminRescheduleForm";
 import { AdminStoreSettings } from "./AdminStoreSettings";
@@ -36,6 +37,7 @@ export function AdminReservations() {
   const [changeTarget, setChangeTarget] = useState<Reservation | null>(null);
   const [detailTarget, setDetailTarget] = useState<Reservation | null>(null);
   const [canManageSettings, setCanManageSettings] = useState(false);
+  const [showReminders,setShowReminders]=useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showBlocks, setShowBlocks] = useState(false);
   const [view, setView] = useState<ReservationView>("list");
@@ -69,7 +71,7 @@ export function AdminReservations() {
   useEffect(() => {
     if (!auth) return;
     const { data: { subscription } } = auth.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") { loadSequence.current++; setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setStatusTarget(null); setChangeTarget(null); setDetailTarget(null); setSuccess(""); setCanManageSettings(false); setShowSettings(false); setShowBlocks(false); }
+      if (event === "SIGNED_OUT") { loadSequence.current++; setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setStatusTarget(null); setChangeTarget(null); setDetailTarget(null); setSuccess(""); setCanManageSettings(false); setShowReminders(false); setShowSettings(false); setShowBlocks(false); }
     });
     return () => subscription.unsubscribe();
   }, [auth]);
@@ -102,7 +104,7 @@ export function AdminReservations() {
     setPage(selectedPage);
     setFilters(selected);
     setCanManageSettings(result.canManageSettings === true);
-    if (!result.canManageSettings) { setShowSettings(false); setShowBlocks(false); }
+    if (!result.canManageSettings) { setShowReminders(false); setShowSettings(false); setShowBlocks(false); }
     setLoggedIn(true);
   }
 
@@ -131,7 +133,7 @@ export function AdminReservations() {
   }
 
   async function switchView(next: ReservationView) {
-    setShowSettings(false); setShowBlocks(false); setStatusTarget(null); setChangeTarget(null); setDetailTarget(null);
+    setShowReminders(false); setShowSettings(false); setShowBlocks(false); setStatusTarget(null); setChangeTarget(null); setDetailTarget(null);
     setError(""); setSuccess("");
     if (view === "list") listFilters.current = filters;
     if (next === "search") {
@@ -148,7 +150,7 @@ export function AdminReservations() {
     setDetailTarget(null);
     loadSequence.current++;
     setRows([]); setListStaff([]); setHasMore(false); setLoggedIn(false); setError(""); setSuccess(""); setStatusTarget(null); setChangeTarget(null);
-    setCanManageSettings(false); setShowSettings(false); setShowBlocks(false);
+    setCanManageSettings(false); setShowReminders(false); setShowSettings(false); setShowBlocks(false);
     await auth!.auth.signOut();
   }
 
@@ -201,20 +203,21 @@ export function AdminReservations() {
       <button className="primary" disabled={busy} type="submit">{busy ? "確認中…" : "ログイン"}</button>
     </form> : <>
       <nav className="grid" aria-label="予約画面の切り替え">
-        <button type="button" className={view === "list" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("list")}>予約一覧</button>
-        <button type="button" className={view === "search" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("search")}>予約検索</button>
-        <button type="button" className={view === "history" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("history")}>予約履歴</button>
-        <button type="button" className={view === "unrecorded" && !showSettings && !showBlocks ? "selected" : ""} disabled={busy} onClick={() => switchView("unrecorded")}>結果の記録が必要な予約</button>
+        <button type="button" className={view === "list" && !showSettings && !showBlocks && !showReminders ? "selected" : ""} disabled={busy} onClick={() => switchView("list")}>予約一覧</button>
+        <button type="button" className={view === "search" && !showSettings && !showBlocks && !showReminders ? "selected" : ""} disabled={busy} onClick={() => switchView("search")}>予約検索</button>
+        <button type="button" className={view === "history" && !showSettings && !showBlocks && !showReminders ? "selected" : ""} disabled={busy} onClick={() => switchView("history")}>予約履歴</button>
+        <button type="button" className={view === "unrecorded" && !showSettings && !showBlocks && !showReminders ? "selected" : ""} disabled={busy} onClick={() => switchView("unrecorded")}>結果の記録が必要な予約</button>
       </nav>
       <div className="grid">
-        <button disabled={busy || (view === "search" && !searchStarted)} onClick={async () => { setShowSettings(false); setShowBlocks(false); await refresh(); }}>{view === "search" ? "検索結果を更新" : "予約一覧を更新"}</button>
+        <button disabled={busy || (view === "search" && !searchStarted)} onClick={async () => { setShowReminders(false); setShowSettings(false); setShowBlocks(false); await refresh(); }}>{view === "search" ? "検索結果を更新" : "予約一覧を更新"}</button>
         {canManageSettings && <>
-          <button className={showSettings ? "selected" : ""} disabled={busy} onClick={() => { if (showSettings) { void switchView("list"); return; } setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowBlocks(false); setShowSettings(true); }}> {showSettings ? "予約一覧に戻る" : "店舗設定"} </button>
-          <button className={showBlocks ? "selected" : ""} disabled={busy} onClick={() => { if (showBlocks) { void switchView("list"); return; } setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowSettings(false); setShowBlocks(true); }}> {showBlocks ? "予約一覧に戻る" : "受付停止・臨時休業"} </button>
+          <button className={showSettings ? "selected" : ""} disabled={busy} onClick={() => { if (showSettings) { void switchView("list"); return; } setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowReminders(false); setShowBlocks(false); setShowSettings(true); }}> {showSettings ? "予約一覧に戻る" : "店舗設定"} </button>
+          <button className={showBlocks ? "selected" : ""} disabled={busy} onClick={() => { if (showBlocks) { void switchView("list"); return; } setStatusTarget(null); setChangeTarget(null); setError(""); setSuccess(""); setShowReminders(false); setShowSettings(false); setShowBlocks(true); }}> {showBlocks ? "予約一覧に戻る" : "受付停止・臨時休業"} </button>
         </>}
+        <button className={showReminders?"selected":""} disabled={busy} onClick={()=>{setStatusTarget(null);setChangeTarget(null);setDetailTarget(null);setShowSettings(false);setShowBlocks(false);setShowReminders(true);}}>前日連絡</button>
         <button disabled={busy} onClick={logout}>ログアウト</button>
       </div>
-      {showSettings && canManageSettings ? <AdminStoreSettings auth={auth} onBusy={setBusy} /> : showBlocks && canManageSettings ? <AdminAvailabilityBlocks auth={auth} onBusy={setBusy} /> : <>
+      {showReminders ? <AdminReminders auth={auth} onBusy={setBusy}/> : showSettings && canManageSettings ? <AdminStoreSettings auth={auth} onBusy={setBusy} /> : showBlocks && canManageSettings ? <AdminAvailabilityBlocks auth={auth} onBusy={setBusy} /> : <>
       {changeTarget && <dialog ref={changeDialogRef} className="reservation-change-dialog" aria-label="予約日時・担当者の変更"
         onCancel={event => { event.preventDefault(); if (!busy) setChangeTarget(null); }}>
         <button type="button" className="dialog-close" disabled={busy} onClick={() => setChangeTarget(null)}>変更画面を閉じる</button>

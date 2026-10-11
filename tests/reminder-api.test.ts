@@ -1,0 +1,17 @@
+import {beforeEach,it,expect,vi} from "vitest";
+import {NextRequest} from "next/server";
+const {auth,rpc,dispatch}=vi.hoisted(()=>({auth:vi.fn(),rpc:vi.fn(),dispatch:vi.fn()}));
+vi.mock("../lib/admin-auth",()=>({authorizeStaff:auth}));vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));
+vi.mock("../lib/booking-reminders",()=>({dispatchBookingReminders:dispatch,reminderEmailReady:()=>false,authorizeReminderCron:(v:string|null)=>v==="Bearer valid"}));
+import {GET,POST} from "../app/api/admin/reminders/route";
+import {GET as cron} from "../app/api/cron/reminders/route";
+const req=(body?:unknown)=>new NextRequest("http://localhost/api/admin/reminders",{method:body?"POST":"GET",headers:{Authorization:"Bearer user"},...(body?{body:JSON.stringify(body)}:{})});
+beforeEach(()=>{vi.resetAllMocks();auth.mockResolvedValue({storeId:"trusted",userId:"actor",role:"admin"});rpc.mockResolvedValue({data:{enabled:false,rows:[]},error:null});dispatch.mockResolvedValue({sent:1,failed:0});});
+it("requires staff authentication for private contact lists",async()=>{auth.mockResolvedValue(null);expect((await GET(req())).status).toBe(401);expect(rpc).not.toHaveBeenCalled();});
+it("scopes the dashboard to the authenticated store and never sends on GET",async()=>{const r=await GET(req());expect(r.headers.get("cache-control")).toBe("private, no-store");expect(rpc).toHaveBeenCalledWith("booking_reminder_dashboard",{p_store_id:"trusted",p_email_ready:false});expect(dispatch).not.toHaveBeenCalled();});
+it("staff cannot enable or send reminders",async()=>{auth.mockResolvedValue({storeId:"trusted",userId:"actor",role:"staff"});for(const body of [{action:"enable",enabled:true},{action:"send"}])expect((await POST(req(body))).status).toBe(403);});
+it("ignores tenant IDs supplied when enabling or sending",async()=>{await POST(req({action:"enable",enabled:true,storeId:"other"}));expect(rpc).toHaveBeenCalledWith("set_booking_reminders_enabled",{p_store_id:"trusted",p_enabled:true});await POST(req({action:"send",storeId:"other"}));expect(dispatch).toHaveBeenCalledWith("trusted");});
+it("records staff contact with trusted actor and tenant",async()=>{const id="11111111-1111-1111-1111-111111111111";await POST(req({action:"contacted",id,storeId:"other",userId:"other"}));expect(rpc).toHaveBeenCalledWith("record_reminder_contact",{p_store_id:"trusted",p_id:id,p_user_id:"actor"});});
+it("hides internal failures",async()=>{rpc.mockResolvedValue({error:{message:"secret"}});const r=await GET(req());expect(r.status).toBe(503);expect(await r.text()).not.toContain("secret");});
+it("cron never sends without authentication",async()=>{expect((await cron(new NextRequest("http://localhost/api/cron/reminders"))).status).toBe(401);expect(dispatch).not.toHaveBeenCalled();});
+it("authorized cron processes enabled stores",async()=>{const r=await cron(new NextRequest("http://localhost/api/cron/reminders",{headers:{authorization:"Bearer valid"}}));expect(r.status).toBe(200);expect(dispatch).toHaveBeenCalledWith(null);});
