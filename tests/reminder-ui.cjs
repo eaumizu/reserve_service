@@ -9,6 +9,7 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   await page.route('**/auth/v1/user*',route=>route.fulfill({status:200,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,OPTIONS'},contentType:'application/json',body:JSON.stringify(user)}));
   await page.route('**/api/admin/reservations?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({reservations:[],staff:[],hasMore:false,canManageSettings:true})}));
   await page.route('**/api/admin/booking-options',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({storeId:user.app_metadata.store_id,services:[],staff:[],links:[]})}));
+  await page.route('**/api/admin/line-settings',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({accountName:'',friendUrl:'',channelId:'',hasAccessToken:false,hasChannelSecret:false,version:null,encryptionReady:true})}));
   await page.route('**/api/admin/settings',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({store:{id:user.app_metadata.store_id,name:'店舗'},services:[],staff:[],links:[],hours:[]})}));
   let emailSettings=null;const emailActions=[];let emailPending=1;
   await page.route('**/api/admin/email-settings',async route=>{
