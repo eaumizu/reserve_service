@@ -9,6 +9,8 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   await page.route('**/auth/v1/user*',route=>route.fulfill({status:200,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,POST,OPTIONS'},contentType:'application/json',body:JSON.stringify(user)}));
   await page.route('**/api/admin/reservations?*',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({reservations:[],staff:[],hasMore:false,canManageSettings:true})}));
   await page.route('**/api/admin/booking-options',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({storeId:user.app_metadata.store_id,services:[],staff:[],links:[]})}));
+  await page.route('**/api/admin/line-settings',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({accountName:'',friendUrl:'',channelId:'',hasAccessToken:false,hasChannelSecret:false,version:null,encryptionReady:true})}));
+  await page.route('**/api/admin/settings',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({store:{id:user.app_metadata.store_id,name:'店舗'},services:[],staff:[],links:[],hours:[]})}));
   let emailSettings=null;const emailActions=[];let emailPending=1;
   await page.route('**/api/admin/email-settings',async route=>{
    const body=route.request().method()==='POST'?route.request().postDataJSON():null;
@@ -19,6 +21,8 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
    }
    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({settings:emailSettings,platformReady:true,events:{pending:emailPending,expired:0,rows:[{id:"event",reservationId:"reservation",kind:"created",state:emailPending?"pending":"sent",recipient:"customer@example.com",createdAt:"2030-01-01T00:00:00Z",customerName:"メールのお客様",startAt:"2030-01-02T01:15:00Z"}]},delivery:body?.action==="retry"?{sent:1,failed:0}:undefined})});
   });
+  let contactRows=[{id:'cccccccc-cccc-cccc-cccc-cccccccccccc',reservationId:'reservation',channel:'email',kind:'changed',state:'pending',customerName:'要連絡のお客様',phone:'09000000000',startAt:'2030-01-02T01:15:00Z',serviceName:'整体',staffName:'担当',canRetry:true,canContact:true}];let contactWrites=0;
+  await page.route('**/api/admin/contacts',async route=>{if(route.request().method()==='POST'){contactWrites++;assert.equal(route.request().postDataJSON().action,'contacted');contactRows=contactRows.map(r=>({...r,state:'contacted',canRetry:false,canContact:false}));}await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({enabled:true,canManage:true,events:contactRows,reminders:[],notice:'電話での連絡済みを記録しました。'})});});
   let enabled=false,sends=0;const actions=[];const dialogs=[];page.on('dialog',d=>dialogs.push(d.message()));
   let row={id:'77777777-7777-7777-7777-777777777777',startAt:'2030-01-02T01:15:00Z',customerName:'電話のお客様',phone:'09000000033',staffName:'担当',serviceName:'整体',state:'phone',channel:'phone',failed:false,sentAt:null,contactedAt:null};
   await page.route('**/api/admin/reminders',async route=>{
@@ -30,7 +34,9 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   });
   await page.goto('http://localhost:3000/admin');
   await page.getByLabel('メールアドレス',{exact:true}).fill('staff@example.com');await page.getByLabel('パスワード',{exact:true}).fill('test-password');await page.getByRole('button',{name:'ログイン',exact:true}).click();
-  await page.getByRole('button',{name:'前日連絡',exact:true}).click();
+  await page.getByRole('button',{name:'連絡管理',exact:true}).click();await page.getByRole('heading',{name:'対応が必要な連絡（1件）'}).waitFor();assert.equal(contactWrites,0);assert.equal(await page.getByText('電話で連絡済み',{exact:true}).count(),0);await page.getByRole('button',{name:'電話で連絡済みにする',exact:true}).click();await page.getByText('連絡が必要な予約はありません。',{exact:true}).waitFor();assert.equal(contactWrites,1);await page.getByText('通知履歴を見る（1件）',{exact:true}).click();await page.getByText(/要連絡のお客様様.*電話で連絡済み/).waitFor();
+  await page.getByRole('button',{name:'店舗設定',exact:true}).click();
+  await page.getByText('LINE・メール・前日通知の設定',{exact:true}).click();
   await page.getByText('電話連絡が必要',{exact:true}).waitFor();
   assert.equal(sends,0,'opening contact list must never send');
   assert.equal(await page.getByRole('button',{name:'未送信の前日通知を送信・再送',exact:true}).isDisabled(),true);

@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
 import type {SupabaseClient} from "@supabase/supabase-js";
-import {AdminEmailSettings} from "./AdminEmailSettings";
+
 type Row={id:string;startAt:string;customerName:string;phone:string;serviceName:string;staffName:string;channel:string;state:string;failed:boolean;sentAt:string|null;contactedAt:string|null};
 type Dashboard={enabled:boolean;emailReady:boolean;cronReady:boolean;canManage:boolean;rows:Row[];delivery?:{sent:number;failed:number}};
 const japan=(value:string)=>new Date(value).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"});
@@ -53,7 +53,7 @@ export function AdminReminders({auth,onBusy}:{auth:SupabaseClient;onBusy:(value:
     <td>{reminderStateLabel(row)}{(row.sentAt||row.contactedAt)&&<p>{japan((row.sentAt||row.contactedAt)!)}</p>}</td>
     <td>{(row.state==="phone"||(row.state==="pending"&&row.failed))&&<button disabled={busy} onClick={()=>{if(window.confirm(`${row.customerName}様に電話で予約をお伝えできましたか？不在・留守番電話の場合は連絡済みにせず、そのまま残してください。`))void run({action:"contacted",id:row.id});}}>電話で連絡済みにする</button>}</td>
    </tr>)}</tbody></table></div>}
-   {data.canManage&&<AdminEmailSettings auth={auth} onBusy={onBusy}/>}
+
    <p className="muted">表示は200件までです。LINE連携や電話での連絡は必須ではなく、LINEなし・メールなしでも予約できます。</p>
   </>}
  </section>;
