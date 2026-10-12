@@ -79,3 +79,6 @@ describe("admin-only store settings", () => {
     expect((await POST(request())).status).toBe(503);
   });
 });
+
+it("archives the exact target in the authenticated store",async()=>{authorizeStaff.mockResolvedValue({role:"admin",storeId:"trusted"});const id="11111111-1111-1111-1111-111111111111";rpc.mockResolvedValue({data:{id},error:null});for(const kind of ["service_delete","staff_delete"]){const response=await POST(new NextRequest("http://localhost/api/admin/settings",{method:"POST",body:JSON.stringify({kind,storeId:"other",data:{id}})}));expect(response.status).toBe(200);expect(rpc).toHaveBeenCalledWith("archive_booking_setting",{p_store_id:"trusted",p_kind:kind,p_id:id});}});
+it("returns a useful reason when a setting still has upcoming bookings",async()=>{authorizeStaff.mockResolvedValue({role:"admin",storeId:"trusted"});rpc.mockResolvedValue({error:{message:"setting_has_upcoming_reservations"}});const r=await POST(new NextRequest("http://localhost/api/admin/settings",{method:"POST",body:JSON.stringify({kind:"service_delete",data:{id:"11111111-1111-1111-1111-111111111111"}})}));expect(r.status).toBe(409);expect((await r.json()).error).toContain("今後の確定予約");});
