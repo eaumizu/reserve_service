@@ -8,7 +8,7 @@ export function bookingSiteOrigin(){
 export function lineBookingMessage(booking:CustomerBooking,url:string){
  const japan=(value:string)=>new Date(value).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
  const state:Record<string,string>={confirmed:"予約が確定しています。",cancelled:"この予約はキャンセル済みです。",completed:"この予約は施術完了です。",no_show:"この予約は無断キャンセルとして記録されています。"};
- return `${booking.storeName}\nLINEとの予約連携が完了しました。\n${state[booking.status]??"予約情報をご確認ください。"}\n\n日時：${japan(booking.startAt)} ～ ${japan(booking.endAt)}（日本時間）\nメニュー：${booking.serviceName}\n担当：${booking.staffName}\n\n予約確認・変更・キャンセル\n${url}\n\nリンクはご本人専用です。他の方には共有しないでください。変更・キャンセルは施術開始前までです。`;
+ return `${booking.storeName}\nLINEとの予約連携が完了しました。\n${state[booking.status]??"予約情報をご確認ください。"}\n\n日時：${japan(booking.startAt)} ～ ${japan(booking.endAt)}（日本時間）\nメニュー：${booking.serviceName}${booking.staffName?`\n担当：${booking.staffName}`:""}\n\n予約確認・変更・キャンセル\n${url}\n\nリンクはご本人専用です。他の方には共有しないでください。変更・キャンセルは施術開始前までです。`;
 }
 export async function sendLineBookingNotification(job:LineBookingNotification,accessToken:string){
  const token=decryptLineCredential(job.storeId,job.tokenCipher);

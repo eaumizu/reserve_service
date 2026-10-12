@@ -11,7 +11,7 @@ export function emailBookingTokenCipher(storeId:string,token:string,email:string
 export function emailBookingMessage(job:EmailBookingEvent){
  const p=job.payload;
  const date=(v:string)=>new Date(v).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
- let text=job.kind==="created"?`${p.storeName}\nご予約が確定しました。\n\n日時：${date(p.startAt)} ～ ${date(p.endAt)}（日本時間）\nメニュー：${p.serviceName}\n担当：${p.staffName}`:
+ let text=job.kind==="created"?`${p.storeName}\nご予約が確定しました。\n\n日時：${date(p.startAt)} ～ ${date(p.endAt)}（日本時間）\nメニュー：${p.serviceName}${p.staffName?`\n担当：${p.staffName}`:""}`:
  lineReservationEventMessage({id:job.id,storeId:job.storeId,userId:"",kind:job.kind,payload:p});
  if(p.tokenCipher&&p.tokenHash){
   const token=decryptLineCredential(job.storeId,p.tokenCipher);

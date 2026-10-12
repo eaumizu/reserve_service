@@ -45,3 +45,6 @@ describe("store setting validation", () => {
     expect(parseSettingsChange({ kind: "hours", data: { hours } })).toBeNull();
   });
 });
+
+it("allows unnamed staff without a displayed name",()=>{expect(parseSettingsChange({kind:"staff",data:{name:"  ",active:true,serviceIds:[]}})).toEqual({kind:"staff",data:{name:"",active:true,serviceIds:[]}});});
+it("whitelists deletion IDs and rejects invalid targets",()=>{const id="11111111-1111-1111-1111-111111111111";for(const kind of ["service_delete","staff_delete"]){expect(parseSettingsChange({kind,data:{id,storeId:"other"}})).toEqual({kind,data:{id}});expect(parseSettingsChange({kind,data:{id:"bad"}})).toBeNull();}});

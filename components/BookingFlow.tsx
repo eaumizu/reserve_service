@@ -27,7 +27,7 @@ export function BookingFlow() {
       .then(async ([catalog, policy]) => {
         if (!catalog.ok || !policy.ok) throw new Error();
         const [items, rule] = await Promise.all([catalog.json(), policy.json()]);
-        if (active) { setServices(items); setRules(rule); }
+        if (active) { setServices(items); if(items.length===1)setService(items[0]); setRules(rule); }
       }).catch(() => { if (active) setError("予約設定を読み込めません。ページを再読み込みしてください。"); });
     return () => { active = false; };
   }, []);
@@ -62,7 +62,7 @@ export function BookingFlow() {
       <label>施術メニュー<select value={service?.id ?? ""} onChange={e => { setSlot(undefined); setService(services.find(s => s.id === e.target.value)); }}><option value="">選んでください</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}（{s.duration_minutes}分・¥{s.price.toLocaleString()}）</option>)}</select></label>
       <label>ご希望の日<input type="date" disabled={!rules} min={rules?.minDate} max={rules?.maxDate} value={date} onChange={e => { setSlot(undefined); setDate(e.target.value); }} /></label>
       {loading && <p role="status">空き枠を確認しています…</p>}
-      {date && <div className="grid">{slots.map(s => <button className={slot?.startAt === s.startAt && slot.staffId === s.staffId ? "selected" : ""} key={s.staffId + s.startAt} onClick={() => setSlot(s)}>{new Date(s.startAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}<br /><small>{s.staffName}</small></button>)}</div>}
+      {date && <div className="grid">{slots.map(s => <button className={slot?.startAt === s.startAt && slot.staffId === s.staffId ? "selected" : ""} key={s.staffId + s.startAt} onClick={() => setSlot(s)}>{new Date(s.startAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}{s.staffName&&<><br /><small>{s.staffName}</small></>}</button>)}</div>}
       {!loading && service && date && !slots.length && !error && <p>この日に受付できる空き枠はありません。別の日付を選択してください。</p>}
       <label>お名前<input value={name} onChange={e => setName(e.target.value)} /></label>
       <label>電話番号<input inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} /></label>
@@ -71,7 +71,7 @@ export function BookingFlow() {
       <button className="primary" disabled={parseCustomerEmail(email) === undefined || !rules || !service || !slot || !name.trim() || !phone.trim() || loading} onClick={() => setStage("confirm")}>確認画面へ</button>
     </>}
     {stage === "confirm" && <>
-      <p>{service?.name}<br />{slot && new Date(slot.startAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}／{slot?.staffName}<br />{name} 様（{phone}）<br />メール：{email.trim() || "記載なし"}</p>
+      <p>{service?.name}<br />{slot && new Date(slot.startAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}{slot?.staffName&&`／${slot.staffName}`}<br />{name} 様（{phone}）<br />メール：{email.trim() || "記載なし"}</p>
       <div className="grid"><button disabled={busy} onClick={() => setStage("form")}>戻る</button><button className="primary" disabled={busy} onClick={submit}>{busy ? "予約を確定中…" : "予約を確定する"}</button></div>
     </>}
   </section>;

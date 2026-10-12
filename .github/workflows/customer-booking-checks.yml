@@ -64,6 +64,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0018_store_email_settings.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0019_email_booking_notifications.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0020_contact_management.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0021_archive_menu_staff.sql
           psql -v ON_ERROR_STOP=1 -f supabase/seed.sql
           psql -v ON_ERROR_STOP=1 -f tests/customer-booking-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/line-reservation-events-db.sql
@@ -71,6 +72,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f tests/store-email-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/email-booking-events-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/contacts-db.sql
+          psql -v ON_ERROR_STOP=1 -f tests/archive-settings-db.sql
       - name: Browser checks
         run: |
           npm install --no-save --no-audit --no-fund playwright

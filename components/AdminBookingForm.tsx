@@ -47,7 +47,7 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
           if (response.status === 401) await auth.auth.signOut();
           throw new Error(result.error);
         }
-        if (active) setOptions(result);
+        if (active) {setOptions(result);if(result.services.length===1)setServiceId(result.services[0].id);}
       } catch { if (active) setError("予約設定を取得できません。画面の更新後、再度ログインしてください。"); }
     }
     void load();
@@ -115,6 +115,7 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
   }
 
   const eligibleStaff = options?.staff.filter(person => options.links.some(link => link.serviceId === serviceId && link.staffId === person.id)) ?? [];
+  useEffect(()=>{const eligible=options?.staff.filter(p=>options.links.some(l=>l.serviceId===serviceId&&l.staffId===p.id))??[];if(eligible.length===1)setStaffId(eligible[0].id);},[options,serviceId]);
   return <form onSubmit={submit}>
     <h2>電話・店頭の予約登録</h2>
     {error && <p className="error" role="alert">{error}</p>}
@@ -132,9 +133,9 @@ export function AdminBookingForm({ auth, onCreated, onBusy }: {
       <label>メニュー<select required value={serviceId} onChange={e => { clearSlot(); setServiceId(e.target.value); setStaffId(""); }}>
         <option value="">選んでください</option>{options.services.map(service => <option key={service.id} value={service.id}>{service.name}（{service.duration_minutes}分）</option>)}
       </select></label>
-      <label>担当者<select required value={staffId} onChange={e => { clearSlot(); setStaffId(e.target.value); }}>
+      {!(eligibleStaff.length===1&&!eligibleStaff[0].name)&&<label>担当者<select required value={staffId} onChange={e => { clearSlot(); setStaffId(e.target.value); }}>
         <option value="">選んでください</option>{eligibleStaff.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
-      </select></label>
+      </select></label>}
       <label>予約日（日本時間）<input required type="date" value={date} onChange={e => { clearSlot(); setDate(e.target.value); }} /></label>
       <label>開始時間（日本時間）<select required value={start} disabled={!serviceId || !staffId || !date || slotsLoading || !slots.length} onChange={e => setStart(e.target.value)}>
         <option value="">{slotsLoading ? "空き時間を確認中…" : "空き時間を選んでください"}</option>

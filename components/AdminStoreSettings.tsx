@@ -64,6 +64,7 @@ function ServiceEditor({ service, save }: { service?: SettingsService; save: Sav
     <label className="checkline"><input type="checkbox" checked={draft.active} onChange={e => setDraft({ ...draft, active: e.target.checked })} />予約受付を有効にする</label>
     <label className="checkline"><input type="checkbox" checked={draft.online_bookable} onChange={e => setDraft({ ...draft, online_bookable: e.target.checked })} />Web予約で公開する</label>
     <button type="submit" className="primary">{service ? "メニューを保存" : "メニューを追加"}</button>
+    {service&&<button type="button" onClick={()=>{if(window.confirm(`${service.name}を削除しますか？過去の予約履歴は残ります。`))void save({kind:"service_delete",data:{id:service.id}});}}>メニューを削除</button>}
   </form>;
 }
 
@@ -80,8 +81,8 @@ function StaffEditor({ person, services, assignments, save }: {
     }
   }
   return <form className="card" onSubmit={submit}>
-    <h3>{person ? person.name : "新しいスタッフを追加"}</h3>
-    <label>スタッフ名<input required maxLength={100} value={name} onChange={e => setName(e.target.value)} /></label>
+    <h3>{person ? person.name||"名前未設定の担当者" : "新しいスタッフを追加"}</h3>
+    <label>スタッフ名（任意）<input placeholder="空欄でも予約できます" maxLength={100} value={name} onChange={e => setName(e.target.value)} /></label>
     <label className="checkline"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />新規予約の担当を有効にする</label>
     <p>対応メニュー</p>
     {services.map(service => <label className="checkline" key={service.id}>
@@ -90,6 +91,7 @@ function StaffEditor({ person, services, assignments, save }: {
     </label>)}
     {!serviceIds.length && <p className="muted">対応メニューを選ぶまで、新規予約の担当者として表示されません。</p>}
     <button type="submit" className="primary">{person ? "スタッフを保存" : "スタッフを追加"}</button>
+    {person&&<button type="button" onClick={()=>{if(window.confirm(`${person.name}を削除しますか？過去の予約履歴は残ります。`))void save({kind:"staff_delete",data:{id:person.id}});}}>担当者を削除</button>}
   </form>;
 }
 
@@ -180,7 +182,7 @@ export function AdminStoreSettings({ auth, onBusy }: { auth: SupabaseClient; onB
     inFlight.current = true; setBusy(true); onBusy(true); setError(""); setSuccess("");
     try {
       await request({ method: "POST", body: JSON.stringify(change) });
-      setSuccess("設定を保存しました。");
+      setSuccess(change.kind==="service_delete"||change.kind==="staff_delete"?"削除しました。過去の予約履歴は残ります。":"設定を保存しました。");
       try { setSettings(await request()); }
       catch { setError("保存は完了しましたが再取得に失敗しました。設定を再読み込みして確認してください。"); }
       return true;

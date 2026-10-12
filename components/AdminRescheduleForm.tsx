@@ -124,9 +124,9 @@ export function AdminRescheduleForm({ auth, reservation, onChanged, onClose, onB
       <div className="grid"><button type="button" disabled={busy} onClick={() => setConfirmed(false)}>戻る</button>
         <button type="submit" className="primary" disabled={busy}>{busy ? "変更中…" : "変更を確定する"}</button></div>
     </> : <>
-      <label>変更後の担当者<select required value={staffId} disabled={!options || busy} onChange={e => { resetSelection(); setStaffId(e.target.value); }}>
+      {!(eligibleStaff.length===1&&!eligibleStaff[0].name)&&<label>変更後の担当者<select required value={staffId} disabled={!options || busy} onChange={e => { resetSelection(); setStaffId(e.target.value); }}>
         <option value="">選んでください</option>{eligibleStaff.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
-      </select></label>
+      </select></label>}
       <label>変更後の予約日（日本時間）<input type="date" required value={date} onChange={e => { resetSelection(); setDate(e.target.value); }} /></label>
       <label>変更後の開始時間（日本時間）<select required value={start} disabled={loading || !slots.length || busy} onChange={e => setStart(e.target.value)}>
         <option value="">{loading ? "空き時間を確認中…" : "空き時間を選んでください"}</option>
