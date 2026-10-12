@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SettingsChange, SettingsHour, SettingsService, SettingsStaff, StoreSettings } from "../lib/store-settings";
 
-type Save = (change: SettingsChange) => Promise<boolean>;
+type Save = (change: SettingsChange,onFailure?:(message:string)=>void) => Promise<boolean>;
 const newService = () => ({ name: "", duration_minutes: 30, buffer_before: 0, buffer_after: 15, price: 0, active: true, online_bookable: true });
 const weekdays = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
 const times = CLOCK_TIMES;
@@ -46,6 +46,18 @@ function BookingRulesEditor({ rules, save }: { rules: BookingRules; save: Save }
   </form>;
 }
 
+function DeleteSettingButton({id,kind,name,label,save}:{id:string;kind:"service_delete"|"staff_delete";name:string;label:string;save:Save}) {
+  const [confirm,setConfirm]=useState(false),[error,setError]=useState(""),[deleting,setDeleting]=useState(false);
+  async function remove(){if(deleting)return;setDeleting(true);setError("");try{await save({kind,data:{id}},setError);}finally{setDeleting(false);}}
+  return <div>
+    {!confirm?<button type="button" onClick={()=>{setConfirm(true);setError("");}}>{label}</button>:<div role="group" aria-label={`${name||"名前未設定の担当者"}の削除確認`}>
+      <p>{name||"名前未設定の担当者"}を削除しますか？過去の予約履歴は残ります。</p>
+      {error&&<p role="alert" className="error">{error}</p>}
+      <div className="grid"><button type="button" disabled={deleting} onClick={()=>void remove()}>{deleting?"削除中…":"削除する"}</button><button type="button" disabled={deleting} onClick={()=>{setConfirm(false);setError("");}}>戻る</button></div>
+    </div>}
+  </div>;
+}
+
 function ServiceEditor({ service, save }: { service?: SettingsService; save: Save }) {
   const [draft, setDraft] = useState<Omit<SettingsService, "id"> & { id?: string }>(service ?? newService());
   async function submit(event: FormEvent) {
@@ -64,7 +76,7 @@ function ServiceEditor({ service, save }: { service?: SettingsService; save: Sav
     <label className="checkline"><input type="checkbox" checked={draft.active} onChange={e => setDraft({ ...draft, active: e.target.checked })} />予約受付を有効にする</label>
     <label className="checkline"><input type="checkbox" checked={draft.online_bookable} onChange={e => setDraft({ ...draft, online_bookable: e.target.checked })} />Web予約で公開する</label>
     <button type="submit" className="primary">{service ? "メニューを保存" : "メニューを追加"}</button>
-    {service&&<button type="button" onClick={()=>{if(window.confirm(`${service.name}を削除しますか？過去の予約履歴は残ります。`))void save({kind:"service_delete",data:{id:service.id}});}}>メニューを削除</button>}
+    {service&&<DeleteSettingButton id={service.id} kind="service_delete" name={service.name} label="メニューを削除" save={save}/>}
   </form>;
 }
 
@@ -91,7 +103,7 @@ function StaffEditor({ person, services, assignments, save }: {
     </label>)}
     {!serviceIds.length && <p className="muted">対応メニューを選ぶまで、新規予約の担当者として表示されません。</p>}
     <button type="submit" className="primary">{person ? "スタッフを保存" : "スタッフを追加"}</button>
-    {person&&<button type="button" onClick={()=>{if(window.confirm(`${person.name}を削除しますか？過去の予約履歴は残ります。`))void save({kind:"staff_delete",data:{id:person.id}});}}>担当者を削除</button>}
+    {person&&<DeleteSettingButton id={person.id} kind="staff_delete" name={person.name} label="担当者を削除" save={save}/>}
   </form>;
 }
 
@@ -177,16 +189,19 @@ export function AdminStoreSettings({ auth, onBusy }: { auth: SupabaseClient; onB
     finally { inFlight.current = false; setBusy(false); onBusy(false); }
   }
 
-  async function save(change: SettingsChange) {
+  async function save(change: SettingsChange,onFailure?:(message:string)=>void) {
     if (inFlight.current) return false;
     inFlight.current = true; setBusy(true); onBusy(true); setError(""); setSuccess("");
     try {
-      await request({ method: "POST", body: JSON.stringify(change) });
+      const result=await request({ method: "POST", body: JSON.stringify(change) });
+      const deleting=change.kind==="service_delete"||change.kind==="staff_delete";
+      if(deleting&&result.id!==change.data.id)throw new Error("削除結果を確認できません。設定を再読み込みしてください。");
+      if(deleting)setSettings(current=>current?{...current,services:change.kind==="service_delete"?current.services.filter(s=>s.id!==change.data.id):current.services,staff:change.kind==="staff_delete"?current.staff.filter(s=>s.id!==change.data.id):current.staff}:current);
       setSuccess(change.kind==="service_delete"||change.kind==="staff_delete"?"削除しました。過去の予約履歴は残ります。":"設定を保存しました。");
       try { setSettings(await request()); }
       catch { setError("保存は完了しましたが再取得に失敗しました。設定を再読み込みして確認してください。"); }
       return true;
-    } catch (e) { setError(e instanceof Error ? e.message : "通信エラーです。保存結果を確認してから再操作してください。"); return false; }
+    } catch (e) { const message=e instanceof Error?e.message:"通信エラーです。保存結果を確認してから再操作してください。";setError(message);onFailure?.(message);return false; }
     finally { inFlight.current = false; setBusy(false); onBusy(false); }
   }
 
