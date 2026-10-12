@@ -16,7 +16,7 @@ begin
 -- No visible staff: one private unnamed capacity, linked to the sole menu.
  insert into stores(id,name) values('88888888-8888-8888-8888-888888888888','一人店舗');
  s:='88888888-8888-8888-8888-888888888888';
- insert into business_hours(store_id,weekday,start_time,end_time) select s,d,'09:00','18:00' from generate_series(0,6)d;
+ insert into business_hours(store_id,weekday,start_time,end_time) select s,days.weekday,'09:00','18:00' from generate_series(0,6) as days(weekday);
  sv:=(save_store_settings_atomic(s,'service','{"name":"唯一メニュー","duration_minutes":30,"buffer_before":0,"buffer_after":15,"price":1000,"active":true,"online_bookable":true}'::jsonb)->>'id')::uuid;
  select id into st from staff where store_id=s and is_unassigned and active and name='';
  if st is null or not exists(select 1 from staff_services where staff_id=st and service_id=sv) then raise exception 'no anonymous capacity';end if;
