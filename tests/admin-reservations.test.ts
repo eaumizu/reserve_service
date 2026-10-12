@@ -229,7 +229,7 @@ describe("admin reservations API", () => {
     const response = await GET(new NextRequest(`http://localhost/api/admin/reservations?${params}`));
     expect(response.status).toBe(200);
     expect(query.select.mock.calls[0][0]).toContain("customers!inner(name,phone)");
-    expect(query.ilike).toHaveBeenCalledWith(`customers.${searchBy}`, "%90\\%\\_\\\\%");
+    expect(query.ilike).toHaveBeenCalledWith(searchBy==="name"?"customer_name":`customers.${searchBy}`, "%90\\%\\_\\\\%");
     expect(query.eq).toHaveBeenCalledWith("store_id", storeId);
     expect(query.eq).toHaveBeenCalledWith("status", "completed");
     expect(query.range).toHaveBeenCalledWith(100, 200);
@@ -310,3 +310,5 @@ describe("admin reservations API", () => {
 });
 
 it("returns cancellation success with a notification warning when LINE is unavailable",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});query.maybeSingle.mockResolvedValue({data:{id:reservationId,status:"cancelled"},error:null});notify.mockResolvedValue({pending:true});const r=await patch({reservationId,status:"cancelled"});expect(r.status).toBe(200);expect((await r.json()).notificationWarning).toContain("通知に未送信");expect(notify).toHaveBeenCalledWith("trusted",reservationId);});
+
+it("shows the reservation name while preserving the linked ledger customer",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});query.range.mockResolvedValue({data:[{id:reservationId,customer_name:"予約時の氏名",customers:{name:"台帳の氏名",phone:"09000000000"}}],error:null});const r=await GET(new NextRequest("http://localhost/api/admin/reservations"));const data=await r.json();expect(data.reservations[0].customers.name).toBe("予約時の氏名");expect(data.reservations[0].customers.phone).toBe("09000000000");});
