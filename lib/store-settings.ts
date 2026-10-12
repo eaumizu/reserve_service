@@ -15,6 +15,7 @@ export type StoreSettings = {
 type ServiceEdit = Omit<SettingsService, "id"> & { id?: string };
 type StaffEdit = Omit<SettingsStaff, "id"> & { id?: string; serviceIds: string[] };
 export type SettingsChange =
+  | {kind:"service_delete"|"staff_delete";data:{id:string}}
   | { kind: "store"; data: { name: string } }
   | { kind: "booking_rules"; data: BookingRules }
   | { kind: "service"; data: ServiceEdit }
@@ -31,6 +32,7 @@ const object = (value: unknown): value is Record<string, unknown> => !!value && 
 export function parseSettingsChange(value: unknown): SettingsChange | null {
   if (!object(value) || !object(value.data)) return null;
   const data = value.data;
+  if(value.kind==="service_delete"||value.kind==="staff_delete")return typeof data.id==="string"&&uuid.test(data.id)?{kind:value.kind,data:{id:data.id}}:null;
   if (value.kind === "booking_rules") return validBookingRules(data) ? { kind: "booking_rules", data: { advance_days: data.advance_days, cutoff_minutes: data.cutoff_minutes } } : null;
   if (value.kind === "store") return validName(data.name) ? { kind: "store", data: { name: data.name.trim() } } : null;
   if (value.kind === "service") {
@@ -44,7 +46,7 @@ export function parseSettingsChange(value: unknown): SettingsChange | null {
       price: data.price, active: data.active, online_bookable: data.online_bookable } };
   }
   if (value.kind === "staff") {
-    if (!validName(data.name) || (data.id !== undefined && (typeof data.id !== "string" || !uuid.test(data.id))) ||
+    if ((typeof data.name!=="string"||data.name.length>100) || (data.id !== undefined && (typeof data.id !== "string" || !uuid.test(data.id))) ||
         typeof data.active !== "boolean" || !Array.isArray(data.serviceIds) || data.serviceIds.length > 1000 ||
         !data.serviceIds.every(id => typeof id === "string" && uuid.test(id))) return null;
     return { kind: "staff", data: { ...(data.id ? { id: data.id as string } : {}), name: data.name.trim(), active: data.active, serviceIds: [...new Set(data.serviceIds as string[])] } };

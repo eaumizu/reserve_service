@@ -5,8 +5,8 @@ export type LineReservationEvent={id:string;storeId:string;userId:string;kind:"c
 export const LINE_EVENT_WARNING="予約の保存は完了しました。LINE通知は未送信です。店舗設定の「未送信LINE通知を再送」から確認してください。";
 export function lineReservationEventMessage(job:LineReservationEvent){
  const p=job.payload,japan=(value:string)=>new Date(value).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
- const details=job.kind==="cancelled"?`予約をキャンセルしました。\n\n対象日時：${japan(p.oldStartAt)} ～ ${japan(p.oldEndAt)}\nメニュー：${p.oldServiceName}\n担当：${p.oldStaffName}`:
- `予約内容を変更しました。\n\n変更前：${japan(p.oldStartAt)} ～ ${japan(p.oldEndAt)}\nメニュー：${p.oldServiceName}\n担当：${p.oldStaffName}\n\n変更後：${japan(p.startAt)} ～ ${japan(p.endAt)}\nメニュー：${p.serviceName}\n担当：${p.staffName}`;
+ const details=job.kind==="cancelled"?`予約をキャンセルしました。\n\n対象日時：${japan(p.oldStartAt)} ～ ${japan(p.oldEndAt)}\nメニュー：${p.oldServiceName}${p.oldStaffName?`\n担当：${p.oldStaffName}`:""}`:
+ `予約内容を変更しました。\n\n変更前：${japan(p.oldStartAt)} ～ ${japan(p.oldEndAt)}\nメニュー：${p.oldServiceName}${p.oldStaffName?`\n担当：${p.oldStaffName}`:""}\n\n変更後：${japan(p.startAt)} ～ ${japan(p.endAt)}\nメニュー：${p.serviceName}${p.staffName?`\n担当：${p.staffName}`:""}`;
  return `${p.storeName}\n${details}\n（日本時間）\n\n予約の確認は、保存済みの予約専用リンクから行えます。`;
 }
 export async function sendLineReservationEvent(job:LineReservationEvent,accessToken:string){

@@ -48,7 +48,7 @@ export function CustomerBookingManager(){
     <button disabled={busy||loading} onClick={reload}>予約を再読み込み</button>
     {!booking?<p>予約リンクから開いてください。見つからない場合は店舗にお問い合わせください。</p>:<>
       <h2>{booking.storeName}</h2><p>{booking.customerName} 様</p>
-      <p>{booking.serviceName} ／ {booking.staffName}</p><p>{japan(booking.startAt)} ～ {japan(booking.endAt)}（日本時間）</p>
+      <p>{booking.serviceName}{booking.staffName&&` ／ ${booking.staffName}`}</p><p>{japan(booking.startAt)} ～ {japan(booking.endAt)}（日本時間）</p>
       <p>状態：{statuses[booking.status]??booking.status}</p>
       {!booking.canManage&&<p>この予約はWebから変更・キャンセルできません。必要な場合は店舗にお問い合わせください。</p>}
       {booking.canManage&&mode==="view"&&<div className="grid"><button disabled={busy} onClick={()=>{setMode("change");setDate("");setSlots([]);setStart("");setSuccess("");}}>予約日時を変更</button>
@@ -56,14 +56,14 @@ export function CustomerBookingManager(){
       {booking.canManage&&mode==="change"&&<>
         <h3>変更先の日時を選択</h3><p>同じメニューを担当できるスタッフ全員の空き枠を表示します。日時と担当者を一緒に選択してください。</p>
         <label>変更先の予約日<input type="date" min={bounds.minDate} max={bounds.maxDate} disabled={busy} value={date} onChange={e=>void loadSlots(e.target.value)}/></label>
-        {loading?<p role="status">空き枠を確認しています…</p>:<div className="grid">{slots.map(group=><div key={group.staffId}><h4>{group.staffName}</h4>{group.starts.length?<div className="grid">{group.starts.map(value=><button key={value} aria-pressed={start===value&&staffId===group.staffId} className={start===value&&staffId===group.staffId?"selected":""} onClick={()=>{setStart(value);setStaffId(group.staffId);setStaffName(group.staffName);}}>{japan(value)} ／ {group.staffName}</button>)}</div>:<p>この担当者の空き枠はありません。</p>}</div>)}</div>}
+        {loading?<p role="status">空き枠を確認しています…</p>:<div className="grid">{slots.map(group=><div key={group.staffId}>{group.staffName&&<h4>{group.staffName}</h4>}{group.starts.length?<div className="grid">{group.starts.map(value=><button key={value} aria-pressed={start===value&&staffId===group.staffId} className={start===value&&staffId===group.staffId?"selected":""} onClick={()=>{setStart(value);setStaffId(group.staffId);setStaffName(group.staffName);}}>{japan(value)}{group.staffName&&` ／ ${group.staffName}`}</button>)}</div>:<p>空き枠はありません。</p>}</div>)}</div>}
         {date&&!loading&&!slots.some(group=>group.starts.length)&&!error&&<p>予約可能な空き枠がありません。別の日を選択してください。</p>}
         <button disabled={!start||loading||busy} onClick={()=>setMode("confirmChange")}>変更内容を確認</button>
         <button disabled={busy||loading} onClick={()=>setMode("view")}>戻る</button>
       </>}
       {booking.canManage&&(mode==="cancel"||mode==="confirmChange")&&<>
         <h3>{mode==="cancel"?"この予約をキャンセルしますか？":"この日時に変更しますか？"}</h3>
-        {mode==="confirmChange"&&<p>{japan(start)}（日本時間） ／ {staffName}</p>}
+        {mode==="confirmChange"&&<p>{japan(start)}（日本時間）{staffName&&` ／ ${staffName}`}</p>}
         <div className="grid"><button disabled={busy} onClick={()=>setMode(mode==="cancel"?"view":"change")}>戻る</button>
         <button className="primary" disabled={busy} onClick={()=>void save(mode==="cancel"?"cancel":"reschedule")}>{busy?"処理中…":mode==="cancel"?"キャンセルを確定":"変更を確定"}</button></div>
       </>}

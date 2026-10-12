@@ -12,7 +12,7 @@ export function authorizeReminderCron(value:string|null){
 export function reminderMessage(job:ReminderJob){
  const japan=(value:string)=>new Date(value).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
  const p=job.payload;
- return `${p.storeName}\n明日のご予約のお知らせです。\n\n日時：${japan(p.startAt)} ～ ${japan(p.endAt)}（日本時間）\nメニュー：${p.serviceName}\n担当：${p.staffName}\n\nご予約の確認・変更・キャンセルは、保存済みの予約専用リンクからお願いします。リンクがない場合は店舗にお問い合わせください。\nご来店をお待ちしております。`;
+ return `${p.storeName}\n明日のご予約のお知らせです。\n\n日時：${japan(p.startAt)} ～ ${japan(p.endAt)}（日本時間）\nメニュー：${p.serviceName}${p.staffName?`\n担当：${p.staffName}`:""}\n\nご予約の確認・変更・キャンセルは、保存済みの予約専用リンクからお願いします。リンクがない場合は店舗にお問い合わせください。\nご来店をお待ちしております。`;
 }
 export async function sendBookingReminder(job:ReminderJob){
  const text=reminderMessage(job);
