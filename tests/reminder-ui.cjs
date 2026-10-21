@@ -54,7 +54,7 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   await page.getByRole('button',{name:'ドメインを登録',exact:true}).click();await page.getByRole('cell',{name:'test-DNS-record',exact:true}).waitFor();
   await page.getByRole('button',{name:'認証を確認',exact:true}).click();await page.getByRole('status').filter({hasText:'ドメインの認証を確認しました。'}).waitFor();
   assert.deepEqual(emailActions,['save','register','verify']);assert.equal(sends,0,'domain verification must not send notifications');
-  await page.getByRole('button',{name:'未送信の予約メールを再送',exact:true}).click();await page.getByRole('status').filter({hasText:'メール配信受付：1件'}).waitFor();await page.getByRole('cell',{name:'配信受付済み',exact:true}).waitFor();assert.equal(emailActions.at(-1),'retry');
+  await page.getByRole('button',{name:'未送信の予約メールを再送',exact:true}).click();await page.getByRole('status').filter({hasText:/^メール配信受付：1件/}).waitFor();await page.getByRole('cell',{name:'配信受付済み',exact:true}).waitFor();assert.equal(emailActions.at(-1),'retry');
   await page.getByRole('button',{name:'予約一覧',exact:true}).click();await page.getByRole('heading',{name:'予約一覧',exact:true,level:2}).waitFor();
   console.log('PASS '+width+'px reminder opt-in, phone contacts, saved status and navigation');await page.close();
  }
