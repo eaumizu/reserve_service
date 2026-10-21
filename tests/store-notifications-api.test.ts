@@ -1,0 +1,12 @@
+import {beforeEach,expect,it,vi} from "vitest";
+import {NextRequest} from "next/server";
+const {auth,rpc,dispatch}=vi.hoisted(()=>({auth:vi.fn(),rpc:vi.fn(),dispatch:vi.fn()}));
+vi.mock("../lib/admin-auth",()=>({authorizeStaff:auth}));vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));vi.mock("../lib/store-email",()=>({emailPlatformReady:()=>true}));vi.mock("../lib/store-booking-notifications",async original=>({...await original<typeof import('../lib/store-booking-notifications')>(),dispatchStoreBookingNotifications:dispatch}));
+import {GET,POST} from "../app/api/admin/store-notifications/route";
+const req=(body?:unknown)=>new NextRequest("http://localhost/api/admin/store-notifications",{method:body?"POST":"GET",...(body?{body:JSON.stringify(body)}:{})});
+beforeEach(()=>{vi.resetAllMocks();auth.mockResolvedValue({role:"admin",storeId:"trusted"});rpc.mockResolvedValue({data:{recipient:"owner@example.com",enabled:true,pending:0,rows:[]},error:null});dispatch.mockResolvedValue({sent:1,failed:0});});
+it("requires admin authorization",async()=>{auth.mockResolvedValue(null);expect((await GET(req())).status).toBe(401);auth.mockResolvedValue({role:"staff"});expect((await GET(req())).status).toBe(403);expect(rpc).not.toHaveBeenCalled();});
+it("opening settings never sends mail",async()=>{const r=await GET(req());expect(r.status).toBe(200);expect(r.headers.get("cache-control")).toBe("private, no-store");expect(dispatch).not.toHaveBeenCalled();});
+it("saves only the authenticated store's address",async()=>{expect((await POST(req({action:"save",recipient:" owner@example.com ",enabled:true,storeId:"other"}))).status).toBe(200);expect(rpc).toHaveBeenCalledWith("save_store_booking_notification_settings",{p_store_id:"trusted",p_recipient:"owner@example.com",p_enabled:true});expect(dispatch).not.toHaveBeenCalled();});
+it("rejects an empty or injected enabled recipient",async()=>{for(const recipient of ["","bad","x@example.com\nBcc:y@example.com"])expect((await POST(req({action:"save",recipient,enabled:true}))).status).toBe(400);});
+it("retries only the authenticated store",async()=>{await POST(req({action:"retry",storeId:"other"}));expect(dispatch).toHaveBeenCalledWith("trusted",null,10);});

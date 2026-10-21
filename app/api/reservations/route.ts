@@ -1,3 +1,4 @@
+import {dispatchStoreBookingNotifications} from "../../../lib/store-booking-notifications";
 import {emailBookingTokenCipher,dispatchEmailBookingEvents,EMAIL_EVENT_WARNING} from "../../../lib/email-booking-events";
 export const maxDuration=60;
 import { NextRequest, NextResponse } from "next/server";
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     const {data,error}=result;
     if (email && error?.code === "PGRST202") return NextResponse.json({ error: "メール連絡先の保存準備中です。時間をおいて再度お試しください。" }, { status: 503 });
     if (error) return NextResponse.json({ error: error.message.includes("booking_window_closed") ? "受付を締め切りました。別の空き枠を選択してください。" : error.message.includes("time_slot_unavailable") ? "その枠は先に予約されました。もう一度お選びください。" : error.message.includes("outside_business_hours") ? "営業時間内の枠を選択してください。" : "予約を確定できませんでした。" }, { status: 409 });
-    const notification=email?await dispatchEmailBookingEvents(storeId,data.id):{pending:false};
+    const [notification]=await Promise.all([email?dispatchEmailBookingEvents(storeId,data.id):Promise.resolve({pending:false}),dispatchStoreBookingNotifications(storeId,data.id)]);
     return NextResponse.json({ reservation: data, managePath,notificationWarning:notification.pending?EMAIL_EVENT_WARNING:null }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ error: "予約を確定できませんでした。" }, { status: 500 }); }
 }

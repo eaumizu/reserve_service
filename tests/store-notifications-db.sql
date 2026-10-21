@@ -1,0 +1,32 @@
+begin;
+do $$
+declare s uuid:='11111111-1111-1111-1111-111111111111';sv uuid:='44444444-4444-4444-4444-444444444444';st uuid:='22222222-2222-2222-2222-222222222222';r reservations;j jsonb;k jsonb;t timestamptz;
+begin
+ insert into store_email_settings(store_id,sender_name,sender_email,domain,domain_id,status) values(s,'店舗','booking@example.com','example.com','aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa','verified');
+ perform save_store_booking_notification_settings(s,'owner@example.com',true);
+ t:=((clock_timestamp() at time zone 'Asia/Tokyo')::date+7+time '13:00') at time zone 'Asia/Tokyo';
+ r:=create_reservation_atomic(s,sv,st,t,'店舗通知のお客様','09000000888','phone',null);
+ if (select count(*) from store_booking_notifications where reservation_id=r.id)<>1 then raise exception 'new booking missing';end if;
+ update reservations set note='private' where id=r.id;
+ if (select count(*) from store_booking_notifications where reservation_id=r.id)<>1 then raise exception 'note sent';end if;
+ update reservations set start_at=start_at+interval '15 minutes',end_at=end_at+interval '15 minutes' where id=r.id;
+ update reservations set status='cancelled' where id=r.id;
+ if (select count(*) from store_booking_notifications where reservation_id=r.id)<>3 then raise exception 'change or cancellation missing';end if;
+ if claim_store_booking_notification('99999999-9999-9999-9999-999999999999',r.id) is not null then raise exception 'cross-store claim';end if;
+ j:=claim_store_booking_notification(s,r.id);
+ if j is null or j->>'kind'<>'created' or j->>'recipient'<>'owner@example.com' or j->'payload'->>'customerName'<>'店舗通知のお客様' then raise exception 'wrong initial job';end if;
+ if claim_store_booking_notification(s,r.id) is not null then raise exception 'parallel out-of-order claim';end if;
+ perform finish_store_booking_notification(s,(j->>'id')::uuid,gen_random_uuid(),true);
+ if (select state from store_booking_notifications where id=(j->>'id')::uuid)<>'sending' then raise exception 'stale lease';end if;
+ perform finish_store_booking_notification(s,(j->>'id')::uuid,(j->>'leaseId')::uuid,false);
+ if claim_store_booking_notification(s,r.id) is not null then raise exception 'retry too soon';end if;
+ update store_booking_notifications set lease_until=clock_timestamp()-interval '1 second' where id=(j->>'id')::uuid;
+ k:=claim_store_booking_notification(s,r.id);if k is null or k->>'id'<>j->>'id' then raise exception 'retry key changed';end if;
+ perform finish_store_booking_notification(s,(k->>'id')::uuid,(k->>'leaseId')::uuid,true);
+ perform save_store_booking_notification_settings(s,'new-owner@example.com',true);
+ if claim_store_booking_notification(s,r.id) is not null then raise exception 'old recipient reused';end if;
+ if (store_booking_notification_dashboard(s)->>'expired')::int<>2 then raise exception 'recipient revision not expired';end if;
+ if (store_booking_notification_dashboard('99999999-9999-9999-9999-999999999999')->>'pending')::int<>0 then raise exception 'cross-store summary';end if;
+ if has_function_privilege('authenticated','claim_store_booking_notification(uuid,uuid)','execute') or has_table_privilege('anon','store_booking_notifications','select') then raise exception 'private store notification access';end if;
+end $$;
+rollback;

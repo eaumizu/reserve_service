@@ -30,7 +30,8 @@ async function handle(request:NextRequest,write:boolean){
    }
    const updated=await read();if(updated.error)throw updated.error;return respond({...updated.data,canManage:actor.role==="admin",notice});
   }
-  return respond({...result.data,canManage:actor.role==="admin"});
+  const storeNotifications=actor.role==="admin"?await db.rpc("store_booking_notification_dashboard",{p_store_id:actor.storeId}):null;
+  return respond({...result.data,canManage:actor.role==="admin",storeNotifications:storeNotifications?.error?null:storeNotifications?.data});
  }catch{return respond({error:"連絡管理を取得できません。0020のSQL適用をご確認ください。"},503);}
 }
 export async function GET(request:NextRequest){return handle(request,false);}
