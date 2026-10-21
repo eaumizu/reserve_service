@@ -36,3 +36,11 @@ export async function verifiedEmailSender(storeId:string){
  if(result.status!=="verified")throw new Error("unverified");
  return settings;
 }
+
+// Delivery already has a verified store configuration. Resend validates the domain
+// again on POST /emails; do not make domain-management availability a send dependency.
+export async function configuredEmailSender(storeId:string){
+ const settings=await readEmailSettings(storeId);
+ if(!settings?.domainId||settings.status!=="verified")throw new Error("unverified");
+ return settings;
+}

@@ -11,3 +11,8 @@ it("never accepts another domain or disabled sending as verified",()=>{expect(()
 it("checks live verification on the trusted store before sending",async()=>{expect(await verifiedEmailSender("trusted")).toEqual(config);expect(rpc).toHaveBeenCalledWith("get_store_email_settings",{p_store_id:"trusted"});expect(fetch).toHaveBeenCalledWith(`https://api.resend.com/domains/${config.domainId}`,expect.objectContaining({method:"GET",redirect:"error"}));});
 it("refuses stale verification and provider failures",async()=>{vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({id:config.domainId,name:config.domain,status:"failed"})));await expect(verifiedEmailSender("trusted")).rejects.toThrow();vi.mocked(fetch).mockResolvedValue(new Response("private",{status:403}));await expect(verifiedEmailSender("trusted")).rejects.toThrow("provider");});
 it("does not query a domain for unverified stores",async()=>{rpc.mockResolvedValue({data:{...config,status:"pending"},error:null});await expect(verifiedEmailSender("trusted")).rejects.toThrow();expect(fetch).not.toHaveBeenCalled();});
+it('does not require a domain-management request to send using verified settings',async()=>{
+ const {configuredEmailSender}=await import('../lib/store-email');vi.mocked(fetch).mockRejectedValue(new Error('domain management unavailable'));
+ expect(await configuredEmailSender('trusted')).toEqual(config);expect(fetch).not.toHaveBeenCalled();
+ rpc.mockResolvedValue({data:{...config,status:'pending'}});await expect(configuredEmailSender('trusted')).rejects.toThrow('unverified');
+});

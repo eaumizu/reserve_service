@@ -51,6 +51,7 @@ export async function dispatchEmailBookingEvents(storeId:string,reservationId:st
  }catch{return {pending:true,sent,failed:failed+1};}
 }
 export async function dispatchReservationNotifications(storeId:string,reservationId:string){
- const [line,email]=await Promise.all([dispatchLineReservationEvents(storeId,reservationId),dispatchEmailBookingEvents(storeId,reservationId),dispatchStoreBookingNotifications(storeId,reservationId),dispatchCalendarJobs(storeId,reservationId)]);
+ await dispatchStoreBookingNotifications(storeId,reservationId);
+ const [line,email]=await Promise.all([dispatchLineReservationEvents(storeId,reservationId),dispatchEmailBookingEvents(storeId,reservationId),dispatchCalendarJobs(storeId,reservationId)]);
  return {pending:line.pending||email.pending};
 }

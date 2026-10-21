@@ -15,9 +15,17 @@ export function resendFetch(url:string,init:RequestInit){
    nextAt=Date.now()+650;
    // The request timeout starts after queueing, so other mail cannot consume it.
    const signal=init.signal?AbortSignal.any([init.signal,AbortSignal.timeout(6000)]):AbortSignal.timeout(6000);
-   const response=await fetch(url,{...init,signal});
-   // Only retry reads or sends protected by the stable notification idempotency key.
+   // Only repeat reads or sends protected by the stable notification ID.
    const safe=(init.method??"GET")==="GET"||new Headers(init.headers).has("Idempotency-Key");
+   let response:Response;
+   try{response=await fetch(url,{...init,signal});}
+   catch(error){
+    if(!safe||attempt>=2||init.signal?.aborted)throw error;
+    await new Promise(r=>setTimeout(r,500*(attempt+1)));continue;
+   }
+   if(response.status>=500&&response.status<=599&&safe&&attempt<2){
+    await response.body?.cancel();await new Promise(r=>setTimeout(r,500*(attempt+1)));continue;
+   }
    if(response.status!==429||!safe||attempt>=2)return response;
    const retryAfter=Number(response.headers.get("retry-after")??"1");
    if(!Number.isFinite(retryAfter)||retryAfter<0||retryAfter>3)return response;
