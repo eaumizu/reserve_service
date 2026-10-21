@@ -1,7 +1,7 @@
 import {beforeEach,expect,it,vi} from "vitest";
 const {rpc,sender}=vi.hoisted(()=>({rpc:vi.fn(),sender:vi.fn()}));
 vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));
-vi.mock("../lib/store-email",()=>({emailPlatformReady:()=>Boolean(process.env.RESEND_API_KEY),verifiedEmailSender:sender}));
+vi.mock("../lib/store-email",()=>({emailPlatformReady:()=>Boolean(process.env.RESEND_API_KEY),configuredEmailSender:sender}));
 vi.mock("../lib/line-booking-notification",()=>({bookingSiteOrigin:()=>"https://booking.example.com"}));
 import {storeBookingMessage,sendStoreBookingNotification,dispatchStoreBookingNotifications,type StoreBookingNotification} from "../lib/store-booking-notifications";
 const job:StoreBookingNotification={id:"event",storeId:"trusted",reservationId:"reservation",leaseId:"lease",recipient:"owner@example.com",kind:"created",payload:{storeName:"店舗",customerName:"予約時のお名前",phone:"09000000000",serviceName:"整体",staffName:"",startAt:"2030-01-02T01:00:00Z",endAt:"2030-01-02T02:00:00Z",from:"店舗 <booking@example.com>",replyTo:"reply@example.com",senderRevision:"revision",domainId:"domain"}};
