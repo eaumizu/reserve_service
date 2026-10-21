@@ -2,7 +2,7 @@
 import {useEffect,useState} from "react";
 import type {SupabaseClient} from "@supabase/supabase-js";
 type Row={id:string;reservationId:string;channel:string;kind?:string;state:string;customerName:string;phone:string;startAt:string;serviceName:string;staffName:string;failed?:boolean;canRetry?:boolean;canContact?:boolean};
-type Dashboard={enabled:boolean;canManage:boolean;reminders:Row[];events:Row[];notice?:string;storeNotifications?:{pending:number;expired:number}|null};
+type Dashboard={enabled:boolean;canManage:boolean;reminders:Row[];events:Row[];notice?:string;calendar?:{pending:number;failed:number}|null;storeNotifications?:{pending:number;expired:number}|null};
 const japan=(v:string)=>new Date(v).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"});
 const kind=(r:Row)=>r.kind==="created"?"予約完了":r.kind==="changed"?"予約変更":r.kind==="cancelled"?"キャンセル":"前日連絡";
 export function AdminContacts({auth,onBusy}:{auth:SupabaseClient;onBusy:(v:boolean)=>void}){
@@ -24,6 +24,7 @@ export function AdminContacts({auth,onBusy}:{auth:SupabaseClient;onBusy:(v:boole
  {error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status">{notice}</p>}
  <button disabled={busy} onClick={()=>void run()}>連絡一覧を更新</button>
  {!data?<p>連絡を読み込んでいます…</p>:<>
+ {!!data.calendar?.pending&&<p role="status">Googleカレンダーに未反映の予約が{data.calendar.pending}件あります。「店舗設定」から同期してください。</p>}
  {!!data.storeNotifications?.pending&&<p role="status">店舗宛メールが{data.storeNotifications.pending}件未送信です。「店舗設定」の店舗向け通知で再送してください。</p>}
  <p>前日通知：{data.enabled?"有効":"停止中"}。設定は「店舗設定」で変更できます。</p>
  {!needs.length?<p>連絡が必要な予約はありません。</p>:<><h3>対応が必要な連絡（{needs.length}件）</h3>{needs.map(row=>{

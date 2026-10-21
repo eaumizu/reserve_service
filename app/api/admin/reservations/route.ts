@@ -1,3 +1,4 @@
+import {dispatchCalendarJobs} from "../../../../lib/google-calendar";
 import {dispatchStoreBookingNotifications} from "../../../../lib/store-booking-notifications";
 import {createCustomerToken,hashCustomerToken} from "../../../../lib/customer-booking";
 import {emailBookingTokenCipher,dispatchEmailBookingEvents,EMAIL_EVENT_WARNING} from "../../../../lib/email-booking-events";
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
     const {data,error}=result;
     if (email && error?.code === "PGRST202") return NextResponse.json({ error: "メール連絡先の保存準備中です。時間をおいて再度お試しください。" }, { status: 503 });
     if (error) return NextResponse.json({ error: error.message.includes("outside_business_hours") ? "営業時間内の枠を指定してください。" : "指定した枠は予約できません。" }, { status: 409 });
-    const [notification]=await Promise.all([email?dispatchEmailBookingEvents(staff.storeId,data.id):Promise.resolve({pending:false}),dispatchStoreBookingNotifications(staff.storeId,data.id)]);
+    const [notification]=await Promise.all([email?dispatchEmailBookingEvents(staff.storeId,data.id):Promise.resolve({pending:false}),dispatchStoreBookingNotifications(staff.storeId,data.id),dispatchCalendarJobs(staff.storeId,data.id)]);
     return NextResponse.json({ reservation: data,notificationWarning:notification.pending?EMAIL_EVENT_WARNING:null }, { status: 201 });
   } catch { return NextResponse.json({ error: "予約を登録できませんでした。" }, { status: 500 }); }
 }
