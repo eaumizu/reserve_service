@@ -70,11 +70,14 @@ begin
  pk:=customer_phone_key(c.phone);perform pg_advisory_xact_lock(hashtextextended('customer:'||p_store_id::text||':'||pk,0));
  select * into c from customers where store_id=p_store_id and id=p_customer_id for update;
  if c.profile_revision is distinct from p_expected_revision then raise exception 'customer_profile_changed';end if;
- if p_edit_name then
+ if p_edit_name and pk<>'' then
   nk:=customer_name_key(p_name);
-  select customer_id into target from customer_identity_aliases where store_id=p_store_id and phone_key=pk and name_key=nk;
-  if found and target<>c.id then raise exception 'customer_name_conflict';end if;
-  insert into customer_identity_aliases values(p_store_id,pk,nk,c.id) on conflict do nothing;
+  -- Existing normalized duplicate profiles remain editable without merging them.
+  if nk is distinct from customer_name_key(c.name) then
+   select customer_id into target from customer_identity_aliases where store_id=p_store_id and phone_key=pk and name_key=nk;
+   if found and target<>c.id then raise exception 'customer_name_conflict';end if;
+   insert into customer_identity_aliases values(p_store_id,pk,nk,c.id) on conflict do nothing;
+  end if;
  end if;
  update customers set name=case when p_edit_name then btrim(p_name) else name end,staff_note=p_note,profile_revision=gen_random_uuid() where id=c.id and store_id=p_store_id;
  return jsonb_build_object('id',c.id);

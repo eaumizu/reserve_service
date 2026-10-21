@@ -21,6 +21,9 @@ begin
  t:=((clock_timestamp() at time zone 'Asia/Tokyo')::date+11+time '13:00') at time zone 'Asia/Tokyo';
  res:=create_reservation_atomic(s,'44444444-4444-4444-4444-444444444444','22222222-2222-2222-2222-222222222222',t,'山田花子','09000000666','phone',null);
  if res.customer_id<>a or res.customer_name<>'山田花子' or (select name from customers where id=a)<>'佐藤 花子' then raise exception 'booking identity or snapshot mismatch';end if;
+ insert into customers(store_id,name,phone) values(s,'佐藤 花子','090-0000-0666') returning id,profile_revision into b,rev;
+ perform save_customer_ledger(s,b,rev,'佐藤 花子','既存重複のメモ',true);
+ if (select staff_note from customers where id=b)<>'既存重複のメモ' then raise exception 'legacy duplicate note edit rejected';end if;
  if has_table_privilege('authenticated','customers','update') then raise exception 'direct profile update allowed';end if;
  if has_function_privilege('anon','customer_ledger_detail(uuid,uuid,integer)','execute') or has_table_privilege('authenticated','customer_identity_aliases','select') then raise exception 'public customer ledger access';end if;
 end $$;
