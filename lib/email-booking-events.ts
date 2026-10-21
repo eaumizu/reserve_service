@@ -1,3 +1,4 @@
+import {dispatchStoreBookingNotifications} from "./store-booking-notifications";
 import {supabaseServer} from "./supabase-server";
 import {emailPlatformReady,verifiedEmailSender} from "./store-email";
 import {decryptLineCredential,encryptLineCredential,lineEncryptionReady} from "./line-settings-secret";
@@ -48,7 +49,6 @@ export async function dispatchEmailBookingEvents(storeId:string,reservationId:st
  }catch{return {pending:true,sent,failed:failed+1};}
 }
 export async function dispatchReservationNotifications(storeId:string,reservationId:string){
- const line=await dispatchLineReservationEvents(storeId,reservationId);
- const email=await dispatchEmailBookingEvents(storeId,reservationId);
+ const [line,email]=await Promise.all([dispatchLineReservationEvents(storeId,reservationId),dispatchEmailBookingEvents(storeId,reservationId),dispatchStoreBookingNotifications(storeId,reservationId)]);
  return {pending:line.pending||email.pending};
 }
