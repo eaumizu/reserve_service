@@ -20,6 +20,11 @@ type ReservationView = "list" | "search" | "history" | "unrecorded";
 const viewTitles: Record<ReservationView, string> = { list: "予約一覧", search: "予約検索", history: "予約履歴", unrecorded: "結果の記録が必要な予約" };
 type ListStaff = { id: string; name: string; active: boolean };
 
+function CalendarConnectionNotice(){
+  const [notice,setNotice]=useState("");
+  useEffect(()=>{const v=new URLSearchParams(window.location.search).get("calendar");if(v)setNotice(v==="connected"?"Googleカレンダーに接続しました。「店舗設定」のGoogle連携から、未反映の予定を同期してください。":"Googleカレンダーに接続できませんでした。店舗設定の接続準備を確認して、もう一度操作してください。");},[]);
+  return notice?<p role="status">{notice}</p>:null;
+}
 export function AdminReservations() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -202,7 +207,7 @@ export function AdminReservations() {
       <label>パスワード<input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></label>
       <button className="primary" disabled={busy} type="submit">{busy ? "確認中…" : "ログイン"}</button>
     </form> : <>
-      <nav className="grid" aria-label="予約画面の切り替え">
+      <CalendarConnectionNotice/><nav className="grid" aria-label="予約画面の切り替え">
         <button type="button" className={view === "list" && !showSettings && !showBlocks && !showReminders ? "selected" : ""} disabled={busy} onClick={() => switchView("list")}>予約一覧</button>
         <button type="button" className={view === "search" && !showSettings && !showBlocks && !showReminders ? "selected" : ""} disabled={busy} onClick={() => switchView("search")}>予約検索</button>
         <button type="button" className={view === "history" && !showSettings && !showBlocks && !showReminders ? "selected" : ""} disabled={busy} onClick={() => switchView("history")}>予約履歴</button>

@@ -1,5 +1,6 @@
 "use client";
 
+import {AdminCalendarSettings} from "./AdminCalendarSettings";
 import {AdminStoreNotifications} from "./AdminStoreNotifications";
 import {AdminReminders} from "./AdminReminders";
 import {AdminEmailSettings} from "./AdminEmailSettings";
@@ -214,6 +215,7 @@ export function AdminStoreSettings({ auth, onBusy }: { auth: SupabaseClient; onB
     <button type="button" disabled={busy || loading} onClick={reload}>設定を再読み込み（未保存の入力は戻ります）</button>
     <details><summary>LINE・メール・前日通知の設定</summary>
 <fieldset disabled={busy} style={{border:0,padding:0}}><AdminLineSettings auth={auth} onBusy={value=>{setBusy(value);onBusy(value);}} /></fieldset>
+    <details><summary>Googleカレンダー連携</summary><AdminCalendarSettings auth={auth} onBusy={value=>{setBusy(value);onBusy(value);}} /></details>
     <AdminStoreNotifications auth={auth} onBusy={value=>{setBusy(value);onBusy(value);}} />
     <AdminEmailSettings auth={auth} onBusy={value=>{setBusy(value);onBusy(value);}} />
     <AdminReminders auth={auth} onBusy={value=>{setBusy(value);onBusy(value);}} />
