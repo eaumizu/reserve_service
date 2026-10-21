@@ -1,4 +1,4 @@
-import {resendFetch} from "./resend-request";
+import {resendFetch,requireResendResponse} from "./resend-request";
 import {domainToASCII} from "node:url";
 import {supabaseServer} from "./supabase-server";
 export type EmailSettings={senderName:string;senderEmail:string;replyTo:string;domain:string;domainId:string|null;revision:string;status:string;records:DNSRecord[]};
@@ -17,8 +17,8 @@ export function parseEmailSettings(body:Record<string,unknown>){
 }
 export async function resendDomain(path:string,method="GET",body?:unknown){
  if(!emailPlatformReady())throw new Error("platform");
- const r=await resendFetch(`https://api.resend.com/domains${path}`,{method,headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","User-Agent":"reserve-service/1.0"},...(body?{body:JSON.stringify(body)}:{}),redirect:"error",signal:AbortSignal.timeout(6000)});
- if(!r.ok)throw new Error("provider");return r.json();
+ const r=await resendFetch(`https://api.resend.com/domains${path}`,{method,headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","User-Agent":"reserve-service/1.0"},...(body?{body:JSON.stringify(body)}:{}),redirect:"error"});
+ await requireResendResponse(r);return r.json();
 }
 export function domainSnapshot(value:Record<string,unknown>,settings:Pick<EmailSettings,"domain"|"domainId">){
  if(value.name!==settings.domain||(settings.domainId&&value.id!==settings.domainId)||typeof value.id!=="string"||!/^[a-f0-9-]{36}$/i.test(value.id))throw new Error("domain_mismatch");

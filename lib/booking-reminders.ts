@@ -22,13 +22,13 @@ export async function sendBookingReminder(job:ReminderJob){
   const settings=await supabaseServer().from("store_line_settings").select("access_token_cipher").eq("store_id",job.storeId).maybeSingle();
   if(settings.error||!settings.data?.access_token_cipher)throw new Error("line_not_ready");
   const token=decryptLineCredential(job.storeId,settings.data.access_token_cipher);
-  const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json","X-Line-Retry-Key":job.id},body:JSON.stringify({to:job.recipient,messages:[{type:"text",text}]}),redirect:"error",signal:AbortSignal.timeout(6000)});
+  const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json","X-Line-Retry-Key":job.id},body:JSON.stringify({to:job.recipient,messages:[{type:"text",text}]}),redirect:"error"});
   if(!r.ok&&!(r.status===409&&r.headers.get("x-line-accepted-request-id")))throw new Error("line_failed");
  }else if(job.channel==="email"){
   if(!reminderEmailReady()||!/^\S+@\S+\.\S+$/.test(job.recipient))throw new Error("email_not_ready");
   const sender=await verifiedEmailSender(job.storeId);
   if(job.payload.emailRevision!==sender.revision||!job.payload.emailFrom||job.payload.emailDomainId!==sender.domainId)throw new Error("sender_changed");
-  const r=await resendFetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","Idempotency-Key":job.id,"User-Agent":"reserve-service/1.0"},body:JSON.stringify({from:job.payload.emailFrom,...(job.payload.emailReplyTo?{reply_to:job.payload.emailReplyTo}:{}),to:[job.recipient],subject:"明日のご予約のお知らせ",text}),redirect:"error",signal:AbortSignal.timeout(6000)});
+  const r=await resendFetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","Idempotency-Key":job.id,"User-Agent":"reserve-service/1.0"},body:JSON.stringify({from:job.payload.emailFrom,...(job.payload.emailReplyTo?{reply_to:job.payload.emailReplyTo}:{}),to:[job.recipient],subject:"明日のご予約のお知らせ",text}),redirect:"error"});
   if(!r.ok)throw new Error("email_failed");
  }else throw new Error("unsupported_channel");
 }

@@ -1,7 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
 import type {SupabaseClient} from "@supabase/supabase-js";
-type Dashboard={recipient:string;enabled:boolean;senderReady:boolean;platformReady:boolean;pending:number;expired:number;rows:{id:string;kind:string;state:string;recipient:string;customerName:string;startAt:string}[];delivery?:{sent:number;failed:number}};
+type Dashboard={recipient:string;enabled:boolean;senderReady:boolean;platformReady:boolean;pending:number;expired:number;rows:{id:string;kind:string;state:string;recipient:string;customerName:string;startAt:string}[];delivery?:{sent:number;failed:number;error?:string}};
 export function AdminStoreNotifications({auth,onBusy}:{auth:SupabaseClient;onBusy:(v:boolean)=>void}){
  const [data,setData]=useState<Dashboard>(),[recipient,setRecipient]=useState(""),[enabled,setEnabled]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState("");
  async function call(body?:unknown,signal?:AbortSignal){const {data:{session}}=await auth.auth.getSession();if(!session)throw new Error("ログインしてください。");const r=await fetch("/api/admin/store-notifications",{method:body?"POST":"GET",cache:"no-store",signal,headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},...(body?{body:JSON.stringify(body)}:{})});const v=await r.json();if(!r.ok)throw new Error(v.error);return v as Dashboard;}
@@ -9,7 +9,7 @@ export function AdminStoreNotifications({auth,onBusy}:{auth:SupabaseClient;onBus
  useEffect(()=>{const c=new AbortController();call(undefined,c.signal).then(apply).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[auth]);
- async function run(action?:string){if(busy)return;setBusy(true);onBusy(true);setError("");setNotice("");try{const v=await call(action?{action,...(action==="save"?{recipient,enabled}:{})}:undefined);apply(v);setNotice(action==="save"?"店舗向け通知を保存しました。次の予約操作から反映します。":action==="retry"?`店舗向けメール配信受付：${v.delivery?.sent??0}件 ／ 失敗：${v.delivery?.failed??0}件。`:"店舗向け通知を更新しました。");}catch(e){setError(e instanceof Error?e.message:"取得できません。");}finally{setBusy(false);onBusy(false);}}
+ async function run(action?:string){if(busy)return;setBusy(true);onBusy(true);setError("");setNotice("");try{const v=await call(action?{action,...(action==="save"?{recipient,enabled}:{})}:undefined);apply(v);if(v.delivery?.error)setError(v.delivery.error);setNotice(action==="save"?"店舗向け通知を保存しました。次の予約操作から反映します。":action==="retry"?`店舗向けメール配信受付：${v.delivery?.sent??0}件 ／ 失敗：${v.delivery?.failed??0}件。`:"店舗向け通知を更新しました。");}catch(e){setError(e instanceof Error?e.message:"取得できません。");}finally{setBusy(false);onBusy(false);}}
  return <section aria-label="店舗向け予約通知"><h3>店舗向け予約通知</h3><p>新規予約・変更・キャンセルを、店舗スタッフが受け取るメールアドレスに通知します。</p>
  {error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status">{notice}</p>}
  <label>店舗の通知受信先メールアドレス<input type="email" maxLength={254} value={recipient} disabled={busy} onChange={e=>setRecipient(e.target.value)}/></label>
