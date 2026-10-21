@@ -1,0 +1,30 @@
+"use client";
+import {useEffect,useRef,useState} from "react";
+import type {SupabaseClient} from "@supabase/supabase-js";
+type Customer={id:string;name:string;phone:string;visits:number;lastVisit?:string|null;note?:string;revision?:string;nameVariants?:number};
+type Booking={id:string;startAt:string;customerName:string;serviceName:string;staffName:string;status:string};
+type Detail={customer:Customer;reservations:Booking[];hasMore:boolean;canEditName:boolean};
+const japan=(v:string)=>new Date(v).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"});
+const statuses:Record<string,string>={confirmed:"確定",completed:"施術完了",cancelled:"キャンセル",no_show:"無断キャンセル"};
+export function AdminCustomers({auth,onBusy}:{auth:SupabaseClient;onBusy:(v:boolean)=>void}){
+ const [query,setQuery]=useState(""),[applied,setApplied]=useState(""),[rows,setRows]=useState<Customer[]>(),[page,setPage]=useState(0),[hasMore,setHasMore]=useState(false),[detail,setDetail]=useState<Detail>(),[historyPage,setHistoryPage]=useState(0),[name,setName]=useState(""),[note,setNote]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState("");
+ const inFlight=useRef(false),mounted=useRef(true);
+ useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+ async function call(path:string,body?:unknown){const {data:{session}}=await auth.auth.getSession();if(!session)throw new Error("ログインしてください。");const r=await fetch(path,{method:body?"POST":"GET",cache:"no-store",headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},...(body?{body:JSON.stringify(body)}:{})});const v=await r.json();if(!r.ok)throw new Error(v.error);return v;}
+ async function work(fn:()=>Promise<void>){if(inFlight.current)return;inFlight.current=true;setBusy(true);onBusy(true);setError("");setNotice("");try{await fn();}catch(e){if(mounted.current)setError(e instanceof Error?e.message:"取得できません。");}finally{inFlight.current=false;if(mounted.current){setBusy(false);onBusy(false);}}}
+ async function search(value=query,next=0){await work(async()=>{const d=await call(`/api/admin/customers?q=${encodeURIComponent(value.trim())}&page=${next}`);if(!mounted.current)return;setRows(d.rows);setHasMore(d.hasMore);setApplied(value.trim());setPage(next);setDetail(undefined);});}
+ async function open(id:string,next=0){await work(async()=>{const d=await call(`/api/admin/customers?id=${encodeURIComponent(id)}&page=${next}`) as Detail;if(!mounted.current)return;setDetail(d);setHistoryPage(next);setName(d.customer.name);setNote(d.customer.note??"");});}
+ async function save(){if(!detail)return;await work(async()=>{const d=await call('/api/admin/customers',{id:detail.customer.id,revision:detail.customer.revision,name,note}) as Detail;if(!mounted.current)return;setDetail(d);setHistoryPage(0);setName(d.customer.name);setNote(d.customer.note??"");setRows(current=>current?.map(c=>c.id===d.customer.id?{...c,name:d.customer.name}:c));setNotice("顧客台帳を保存しました。予約時の氏名は変わりません。");});}
+ const dirty=Boolean(detail&&(name!==detail.customer.name||note!==(detail.customer.note??"")));
+ const discard=()=>!dirty||window.confirm("未保存の入力を戻しますか？");
+ return <section className="card" aria-label="顧客台帳"><h2>顧客台帳</h2>{error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status">{notice}</p>}
+ {!detail?<><form onSubmit={e=>{e.preventDefault();void search();}}><label>顧客の氏名・電話番号<input maxLength={100} value={query} disabled={busy} onChange={e=>setQuery(e.target.value)}/></label><button disabled={busy} type="submit">顧客を検索</button></form>
+ {!rows?<p>氏名か電話番号で検索してください。空欄で検索すると登録済みの顧客を表示します。</p>:!rows.length?<p>該当するお客様はいません。</p>:<><p>{applied?`「${applied}」の検索結果`:"登録済みの顧客"} ／ {page+1}ページ</p><div style={{overflowX:"auto"}}><table className="admin-table"><thead><tr><th>氏名</th><th>電話番号</th><th>来店回数</th><th>最終来店</th><th>操作</th></tr></thead><tbody>{rows.map(c=><tr key={c.id}><td>{c.name}</td><td>{c.phone}</td><td>{c.visits}回</td><td>{c.lastVisit?japan(c.lastVisit):"未記録"}</td><td><button disabled={busy} onClick={()=>void open(c.id)}>顧客の詳細</button></td></tr>)}</tbody></table></div><div className="grid"><button disabled={busy||page===0} onClick={()=>void search(applied,page-1)}>前の顧客ページ</button><button disabled={busy||!hasMore} onClick={()=>void search(applied,page+1)}>次の顧客ページ</button></div></>}
+ </>:<><button disabled={busy} onClick={()=>{if(discard())setDetail(undefined);}}>顧客検索に戻る</button><h3>{detail.customer.name}</h3><p>電話番号：<a href={`tel:${detail.customer.phone.replace(/[^+0-9]/g,"")}`}>{detail.customer.phone}</a> ／ 来店：{detail.customer.visits}回</p>
+ {(detail.customer.nameVariants??0)>1&&<p>この台帳には複数の予約名があります。来店履歴の予約時の氏名を確認してください。</p>}
+ <details><summary>台帳の氏名・メモを編集</summary><label>台帳の氏名<input value={name} maxLength={100} disabled={busy||!detail.canEditName} onChange={e=>setName(e.target.value)}/></label>{!detail.canEditName&&<p>氏名の訂正は管理者が行います。</p>}<label>店舗用の顧客メモ<textarea value={note} maxLength={4000} disabled={busy} onChange={e=>setNote(e.target.value)}/></label><p className="muted">台帳名を訂正しても、各予約に入力された氏名は変わりません。</p><button disabled={busy||!dirty||!name.trim()} onClick={()=>void save()}>顧客台帳を保存</button></details>
+ <h3>予約・来店履歴</h3>{!detail.reservations.length?<p>予約履歴はありません。</p>:<div style={{overflowX:"auto"}}><table className="admin-table"><thead><tr><th>予約日時</th><th>予約時の氏名</th><th>メニュー</th><th>担当者</th><th>結果</th></tr></thead><tbody>{detail.reservations.map(r=><tr key={r.id}><td>{japan(r.startAt)}</td><td>{r.customerName}</td><td>{r.serviceName}</td><td>{r.staffName}</td><td>{statuses[r.status]??r.status}</td></tr>)}</tbody></table></div>}
+ <div className="grid"><button disabled={busy||historyPage===0} onClick={()=>{if(discard())void open(detail.customer.id,historyPage-1);}}>前の履歴ページ</button><button disabled={busy||!detail.hasMore} onClick={()=>{if(discard())void open(detail.customer.id,historyPage+1);}}>次の履歴ページ</button><button disabled={busy} onClick={()=>{if(discard())void open(detail.customer.id,historyPage);}}>顧客台帳を再読み込み</button></div>
+ </>}
+ </section>;
+}
