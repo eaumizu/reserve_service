@@ -1,0 +1,14 @@
+import {beforeEach,expect,it,vi} from "vitest";
+import {NextRequest} from "next/server";
+const {auth,rpc}=vi.hoisted(()=>({auth:vi.fn(),rpc:vi.fn()}));vi.mock("../lib/admin-auth",()=>({authorizeStaff:auth}));vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));
+import {GET,POST} from "../app/api/admin/customers/route";
+const id='11111111-1111-1111-1111-111111111111',revision='22222222-2222-2222-2222-222222222222';
+const req=(url='https://booking.example.com/api/admin/customers',body?:unknown)=>new NextRequest(url,{method:body?'POST':'GET',...(body?{body:JSON.stringify(body)}:{})});
+beforeEach(()=>{vi.resetAllMocks();auth.mockResolvedValue({storeId:'trusted',role:'admin'});rpc.mockResolvedValue({data:{rows:[],customer:{id,name:'氏名'},reservations:[]},error:null});});
+it('requires authentication for every operation',async()=>{auth.mockResolvedValue(null);expect((await GET(req())).status).toBe(401);expect((await POST(req(undefined,{}))).status).toBe(401);expect(rpc).not.toHaveBeenCalled();});
+it('scopes literal searches to the authenticated store',async()=>{const r=await GET(req('https://booking.example.com/api/admin/customers?q=%25_%20&storeId=other&page=2'));expect(r.status).toBe(200);expect(r.headers.get('cache-control')).toBe('private, no-store');expect(rpc).toHaveBeenCalledWith('customer_ledger_search',{p_store_id:'trusted',p_query:'%_',p_offset:100});});
+it('scopes details and returns no other-store record',async()=>{rpc.mockResolvedValue({error:{message:'customer_not_found'}});expect((await GET(req('https://booking.example.com/api/admin/customers?id='+id))).status).toBe(404);expect(rpc).toHaveBeenCalledWith('customer_ledger_detail',expect.objectContaining({p_store_id:'trusted',p_customer_id:id}));});
+it('only admins can change names while staff can save notes',async()=>{auth.mockResolvedValue({storeId:'trusted',role:'staff'});expect((await POST(req(undefined,{id,revision,name:'untrusted name',note:'店舗用メモ',storeId:'other',editName:true}))).status).toBe(200);expect(rpc).toHaveBeenCalledWith('save_customer_ledger',{p_store_id:'trusted',p_customer_id:id,p_expected_revision:revision,p_name:'',p_note:'店舗用メモ',p_edit_name:false});});
+it('keeps concurrent edits from overwriting',async()=>{rpc.mockResolvedValue({error:{message:'customer_profile_changed'}});expect((await POST(req(undefined,{id,revision,name:'訂正氏名',note:''}))).status).toBe(409);});
+it('does not automatically merge colliding customer identities',async()=>{rpc.mockResolvedValue({error:{message:'customer_name_conflict'}});const r=await POST(req(undefined,{id,revision,name:'訂正氏名',note:''}));expect(r.status).toBe(409);expect((await r.json()).error).toContain('自動で統合せず');});
+it('bounds pages and input sizes',async()=>{expect((await GET(req('https://booking.example.com/api/admin/customers?page=-1'))).status).toBe(400);expect((await POST(req(undefined,{id,revision,name:'氏名',note:'x'.repeat(4001)}))).status).toBe(400);});

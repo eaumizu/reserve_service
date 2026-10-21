@@ -1,3 +1,4 @@
+import {resendFetch} from "./resend-request";
 import {dispatchCalendarJobs} from "./google-calendar";
 import {dispatchStoreBookingNotifications} from "./store-booking-notifications";
 import {supabaseServer} from "./supabase-server";
@@ -27,7 +28,7 @@ export async function sendEmailBookingEvent(job:EmailBookingEvent){
  const sender=await verifiedEmailSender(job.storeId),p=job.payload;
  if(sender.revision!==p.senderRevision||sender.domainId!==p.domainId||`${sender.senderName} <${sender.senderEmail}>`!==p.from)throw new Error("sender_changed");
  const text=emailBookingMessage(job),titles={created:"ご予約が確定しました",changed:"ご予約を変更しました",cancelled:"ご予約をキャンセルしました"};
- const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","User-Agent":"reserve-service/1.0","Idempotency-Key":job.id},body:JSON.stringify({from:p.from,...(p.replyTo?{reply_to:p.replyTo}:{}),to:[job.recipient],subject:`${p.storeName}：${titles[job.kind]}`,text}),redirect:"error",signal:AbortSignal.timeout(6000)});
+ const r=await resendFetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","User-Agent":"reserve-service/1.0","Idempotency-Key":job.id},body:JSON.stringify({from:p.from,...(p.replyTo?{reply_to:p.replyTo}:{}),to:[job.recipient],subject:`${p.storeName}：${titles[job.kind]}`,text}),redirect:"error",signal:AbortSignal.timeout(6000)});
  if(!r.ok)throw new Error("delivery_failed");
 }
 // Writes have committed. Delivery errors must not undo or mask a successful booking operation.

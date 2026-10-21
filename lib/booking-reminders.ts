@@ -1,3 +1,4 @@
+import {resendFetch} from "./resend-request";
 import {timingSafeEqual} from "node:crypto";
 import {supabaseServer} from "./supabase-server";
 import {decryptLineCredential} from "./line-settings-secret";
@@ -27,7 +28,7 @@ export async function sendBookingReminder(job:ReminderJob){
   if(!reminderEmailReady()||!/^\S+@\S+\.\S+$/.test(job.recipient))throw new Error("email_not_ready");
   const sender=await verifiedEmailSender(job.storeId);
   if(job.payload.emailRevision!==sender.revision||!job.payload.emailFrom||job.payload.emailDomainId!==sender.domainId)throw new Error("sender_changed");
-  const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","Idempotency-Key":job.id,"User-Agent":"reserve-service/1.0"},body:JSON.stringify({from:job.payload.emailFrom,...(job.payload.emailReplyTo?{reply_to:job.payload.emailReplyTo}:{}),to:[job.recipient],subject:"明日のご予約のお知らせ",text}),redirect:"error",signal:AbortSignal.timeout(6000)});
+  const r=await resendFetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","Idempotency-Key":job.id,"User-Agent":"reserve-service/1.0"},body:JSON.stringify({from:job.payload.emailFrom,...(job.payload.emailReplyTo?{reply_to:job.payload.emailReplyTo}:{}),to:[job.recipient],subject:"明日のご予約のお知らせ",text}),redirect:"error",signal:AbortSignal.timeout(6000)});
   if(!r.ok)throw new Error("email_failed");
  }else throw new Error("unsupported_channel");
 }

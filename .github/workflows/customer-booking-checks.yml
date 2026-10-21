@@ -68,6 +68,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0022_reservation_customer_names.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0023_store_booking_notifications.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/0024_google_calendar.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/0025_customer_ledger.sql
           psql -v ON_ERROR_STOP=1 -f supabase/seed.sql
           psql -v ON_ERROR_STOP=1 -f tests/customer-booking-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/line-reservation-events-db.sql
@@ -79,6 +80,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f tests/reservation-names-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/store-notifications-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/google-calendar-db.sql
+          psql -v ON_ERROR_STOP=1 -f tests/customer-ledger-db.sql
       - name: Browser checks
         run: |
           npm install --no-save --no-audit --no-fund playwright

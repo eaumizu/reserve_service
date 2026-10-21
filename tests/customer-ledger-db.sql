@@ -1,0 +1,30 @@
+begin;
+do $$
+declare s uuid:='11111111-1111-1111-1111-111111111111';a uuid;b uuid;c uuid;rev uuid;res reservations;t timestamptz;d jsonb;
+begin
+ a:=resolve_booking_customer(s,'山田 花子','090-0000-0666');
+ b:=resolve_booking_customer(s,'山田 太郎','09000000666');
+ if a=b then raise exception 'family profiles merged by phone';end if;
+ c:=resolve_booking_customer(s,'山田　花子','０９００００００６６６');
+ if c<>a then raise exception 'normalized returning customer not found';end if;
+ select profile_revision into rev from customers where id=a;
+ perform save_customer_ledger(s,a,rev,'佐藤 花子','連絡希望あり',true);
+ if resolve_booking_customer(s,'佐藤花子','09000000666')<>a or resolve_booking_customer(s,'山田花子','09000000666')<>a then raise exception 'old or corrected alias lost';end if;
+ begin perform save_customer_ledger(s,a,rev,'別氏名','古い画面',true);raise exception 'stale profile edit allowed';exception when others then if sqlerrm<>'customer_profile_changed' then raise;end if;end;
+ select profile_revision into rev from customers where id=a;
+ begin perform save_customer_ledger(s,a,rev,'山田太郎','',true);raise exception 'automatic merge allowed';exception when others then if sqlerrm<>'customer_name_conflict' then raise;end if;end;
+ perform save_customer_ledger(s,a,rev,'勝手な氏名','スタッフのメモ',false);
+ if (select name from customers where id=a)<>'佐藤 花子' then raise exception 'staff changed profile name';end if;
+ d:=customer_ledger_detail(s,a,0);if d->'customer'->>'note'<>'スタッフのメモ' then raise exception 'note not saved';end if;
+ begin perform customer_ledger_detail('99999999-9999-9999-9999-999999999999',a,0);raise exception 'cross-store ledger detail';exception when others then if sqlerrm<>'customer_not_found' then raise;end if;end;
+ if jsonb_array_length(customer_ledger_search(s,'09000000666',0)->'rows')<>2 then raise exception 'family profiles not searchable';end if;
+ t:=((clock_timestamp() at time zone 'Asia/Tokyo')::date+11+time '13:00') at time zone 'Asia/Tokyo';
+ res:=create_reservation_atomic(s,'44444444-4444-4444-4444-444444444444','22222222-2222-2222-2222-222222222222',t,'山田花子','09000000666','phone',null);
+ if res.customer_id<>a or res.customer_name<>'山田花子' or (select name from customers where id=a)<>'佐藤 花子' then raise exception 'booking identity or snapshot mismatch';end if;
+ insert into customers(store_id,name,phone) values(s,'佐藤 花子','090-0000-0666') returning id,profile_revision into b,rev;
+ perform save_customer_ledger(s,b,rev,'佐藤 花子','既存重複のメモ',true);
+ if (select staff_note from customers where id=b)<>'既存重複のメモ' then raise exception 'legacy duplicate note edit rejected';end if;
+ if has_table_privilege('authenticated','customers','update') then raise exception 'direct profile update allowed';end if;
+ if has_function_privilege('anon','customer_ledger_detail(uuid,uuid,integer)','execute') or has_table_privilege('authenticated','customer_identity_aliases','select') then raise exception 'public customer ledger access';end if;
+end $$;
+rollback;

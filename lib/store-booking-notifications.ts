@@ -1,3 +1,4 @@
+import {resendFetch} from "./resend-request";
 import {supabaseServer} from "./supabase-server";
 import {emailPlatformReady,verifiedEmailSender} from "./store-email";
 import {bookingSiteOrigin} from "./line-booking-notification";
@@ -13,7 +14,7 @@ export async function sendStoreBookingNotification(job:StoreBookingNotification)
  if(!bookingEmailAddress(job.recipient))throw new Error("invalid_recipient");
  const sender=await verifiedEmailSender(job.storeId),p=job.payload;
  if(sender.revision!==p.senderRevision||sender.domainId!==p.domainId||`${sender.senderName} <${sender.senderEmail}>`!==p.from)throw new Error("sender_changed");
- const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","User-Agent":"reserve-service/1.0","Idempotency-Key":job.id},body:JSON.stringify({from:p.from,...(p.replyTo?{reply_to:p.replyTo}:{}),to:[job.recipient],subject:`【店舗向け・${{created:"新規予約",changed:"予約変更",cancelled:"キャンセル"}[job.kind]}】${p.storeName}`,text:storeBookingMessage(job)}),redirect:"error",signal:AbortSignal.timeout(6000)});
+ const r=await resendFetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","User-Agent":"reserve-service/1.0","Idempotency-Key":job.id},body:JSON.stringify({from:p.from,...(p.replyTo?{reply_to:p.replyTo}:{}),to:[job.recipient],subject:`【店舗向け・${{created:"新規予約",changed:"予約変更",cancelled:"キャンセル"}[job.kind]}】${p.storeName}`,text:storeBookingMessage(job)}),redirect:"error",signal:AbortSignal.timeout(6000)});
  if(!r.ok)throw new Error("delivery_failed");
 }
 export async function dispatchStoreBookingNotifications(storeId:string,reservationId:string|null=null,limit=2){
