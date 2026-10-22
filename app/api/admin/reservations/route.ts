@@ -5,7 +5,7 @@ import {createCustomerToken,hashCustomerToken} from "../../../../lib/customer-bo
 import {emailBookingTokenCipher,dispatchEmailBookingEvents,EMAIL_EVENT_WARNING} from "../../../../lib/email-booking-events";
 import {dispatchReservationNotifications} from "../../../../lib/email-booking-events";
 export const maxDuration=60;
-import { parseCustomerEmail } from "../../../../lib/reservations/email";
+import { parseCustomerEmail,parseCustomerPhone } from "../../../../lib/reservations/email";
 import { TIME_STEP_MS } from "../../../../lib/reservations/time-grid";
 import { authorizeStaff } from "../../../../lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -112,19 +112,19 @@ export async function POST(request: NextRequest) {
     if (typeof body.serviceId !== "string" || !uuid.test(body.serviceId) ||
         typeof body.staffId !== "string" || !uuid.test(body.staffId) ||
         typeof body.customerName !== "string" || !body.customerName.trim() || body.customerName.length > 100 ||
-        typeof body.customerPhone !== "string" || !body.customerPhone.trim() || body.customerPhone.length > 50 ||
         typeof body.startAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(body.startAt) || !Number.isFinite(Date.parse(body.startAt)) ||
         (body.note !== undefined && (typeof body.note !== "string" || body.note.length > 2000))) {
       return NextResponse.json({ error: "入力内容を確認してください。" }, { status: 400 });
     }
+    const phone=parseCustomerPhone(body.customerPhone);if(phone===undefined)return NextResponse.json({error:"電話番号の入力内容を確認してください。"},{status:400});
     const email = parseCustomerEmail(body.customerEmail);
-    if (email === undefined) return NextResponse.json({ error: "メールアドレスを確認してください。" }, { status: 400 });
+    if (!email) return NextResponse.json({ error: "メールアドレスを確認してください。" }, { status: 400 });
     if (Date.parse(body.startAt) % TIME_STEP_MS !== 0) {
       return NextResponse.json({ error: "開始時間は15分刻みの空き枠から選択してください。" }, { status: 400 });
     }
     try{await refreshCalendarBusyForStart(staff.storeId,body.startAt);}catch{return NextResponse.json({error:"Googleカレンダーの予定を確認できません。時間をおいて空き枠を再取得してください。"},{status:503});}
     const token=createCustomerToken(),cipher=emailBookingTokenCipher(staff.storeId,token,email);
-    const params={ ...(email ? { p_customer_email: email } : {}), p_store_id: staff.storeId, p_service_id: body.serviceId, p_staff_id: body.staffId, p_start_at: body.startAt, p_customer_name: body.customerName.trim(), p_customer_phone: body.customerPhone.trim(), p_source: body.source, p_note: body.note ?? null };
+    const params={ ...(email ? { p_customer_email: email } : {}), p_store_id: staff.storeId, p_service_id: body.serviceId, p_staff_id: body.staffId, p_start_at: body.startAt, p_customer_name: body.customerName.trim(), p_customer_phone: phone, p_source: body.source, p_note: body.note ?? null };
     let result=await supabaseServer().rpc(cipher?"create_customer_booking_atomic":email?"create_reservation_with_email_atomic":"create_reservation_atomic",{...params,...(cipher?{p_token_hash:hashCustomerToken(token),p_token_cipher:cipher}:{})});
     if(cipher&&result.error?.code==="PGRST202")result=await supabaseServer().rpc("create_reservation_with_email_atomic",params);
     const {data,error}=result;

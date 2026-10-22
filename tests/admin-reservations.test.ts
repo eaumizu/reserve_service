@@ -133,7 +133,7 @@ describe("recording attendance outcomes", () => {
 });
 
 const storeId = "11111111-1111-1111-1111-111111111111";
-const input = { storeId, serviceId: "55555555-5555-5555-5555-555555555555", staffId: "22222222-2222-2222-2222-222222222222", startAt: "2030-01-01T10:00:00+09:00", customerName: " 確認用 ", customerPhone: " 09000000000 ", source: "phone" };
+const input = { storeId, serviceId: "55555555-5555-5555-5555-555555555555", staffId: "22222222-2222-2222-2222-222222222222", startAt: "2030-01-01T10:00:00+09:00", customerName: " 確認用 ", customerPhone: " 09000000000 ", customerEmail:"guest@example.com", source: "phone" };
 function post(body: unknown) {
   return POST(new NextRequest("http://localhost/api/admin/reservations", {
     method: "POST", headers: { authorization: "Bearer token", "content-type": "application/json" }, body: JSON.stringify(body),
@@ -156,7 +156,7 @@ describe("manual booking API", () => {
     rpc.mockResolvedValue({ data: { id: "reservation" }, error: null });
     const startAt = `2030-01-01T10:${minute}:00+09:00`;
     expect((await post({ ...input, startAt })).status).toBe(201);
-    expect(rpc).toHaveBeenCalledWith("create_reservation_atomic", expect.objectContaining({ p_start_at: startAt }));
+    expect(rpc).toHaveBeenCalledWith("create_reservation_with_email_atomic", expect.objectContaining({ p_start_at: startAt }));
   });
   it("rejects unauthenticated booking without writing", async () => {
     authorizeStaff.mockResolvedValue(null);
@@ -177,7 +177,7 @@ describe("manual booking API", () => {
     authorizeStaff.mockResolvedValue({ storeId });
     rpc.mockResolvedValue({ data: { id: "reservation" }, error: null });
     expect((await post({ ...input, source })).status).toBe(201);
-    expect(rpc).toHaveBeenCalledWith("create_reservation_atomic", expect.objectContaining({
+    expect(rpc).toHaveBeenCalledWith("create_reservation_with_email_atomic", expect.objectContaining({
       p_store_id: storeId, p_source: source, p_start_at: "2030-01-01T10:00:00+09:00", p_customer_name: "確認用", p_customer_phone: "09000000000",
     }));
   });
@@ -313,3 +313,9 @@ describe("admin reservations API", () => {
 it("returns cancellation success with a notification warning when LINE is unavailable",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});query.maybeSingle.mockResolvedValue({data:{id:reservationId,status:"cancelled"},error:null});notify.mockResolvedValue({pending:true});const r=await patch({reservationId,status:"cancelled"});expect(r.status).toBe(200);expect((await r.json()).notificationWarning).toContain("通知に未送信");expect(notify).toHaveBeenCalledWith("trusted",reservationId);});
 
 it("shows the reservation name while preserving the linked ledger customer",async()=>{authorizeStaff.mockResolvedValue({storeId:"trusted"});query.range.mockResolvedValue({data:[{id:reservationId,customer_name:"予約時の氏名",customers:{name:"台帳の氏名",phone:"09000000000"}}],error:null});const r=await GET(new NextRequest("http://localhost/api/admin/reservations"));const data=await r.json();expect(data.reservations[0].customers.name).toBe("予約時の氏名");expect(data.reservations[0].customers.phone).toBe("09000000000");});
+it('requires email for new manual reservations too',async()=>{
+ authorizeStaff.mockResolvedValue({storeId});expect((await post({...input,customerEmail:''})).status).toBe(400);expect(rpc).not.toHaveBeenCalled();
+});
+it('allows manual booking without a phone when an email is present',async()=>{
+ authorizeStaff.mockResolvedValue({storeId});rpc.mockResolvedValue({data:{id:'reservation'},error:null});expect((await post({...input,customerPhone:undefined})).status).toBe(201);expect(rpc).toHaveBeenCalledWith('create_reservation_with_email_atomic',expect.objectContaining({p_customer_phone:'',p_customer_email:'guest@example.com'}));
+});

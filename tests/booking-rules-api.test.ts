@@ -6,7 +6,7 @@ vi.mock("../lib/supabase-server", () => ({ supabaseServer: () => ({ from: () => 
 import { readBookingRules } from "../lib/booking-rules-server";
 import { POST } from "../app/api/reservations/route";
 import { GET } from "../app/api/booking-rules/route";
-const payload = { storeId: "trusted", serviceId: "service", staffId: "staff", customerName: "確認用", customerPhone: "000", source: "web", startAt: "2030-01-01T11:00:00+09:00" };
+const payload = { storeId: "trusted", serviceId: "service", staffId: "staff", customerName: "確認用", customerPhone: "000", customerEmail:"guest@example.com", source: "web", startAt: "2030-01-01T11:00:00+09:00" };
 beforeEach(() => {
   vi.resetAllMocks(); vi.stubEnv("NEXT_PUBLIC_DEFAULT_STORE_ID", "trusted");
   vi.spyOn(Date, "now").mockReturnValue(Date.parse("2030-01-01T10:00:00+09:00"));
@@ -26,9 +26,9 @@ describe("public booking rules API", () => {
   it("falls back only when the new RPC is missing, without returning a false link", async () => {
     rpc.mockResolvedValueOnce({data:null,error:{code:"PGRST202"}}).mockResolvedValueOnce({data:{id:"legacy"},error:null});
     const result=await post();expect(result.status).toBe(201);expect((await result.json()).managePath).toBeNull();
-    expect(rpc.mock.calls.map(call=>call[0])).toEqual(["create_customer_booking_atomic","create_reservation_atomic"]);
+    expect(rpc.mock.calls.map(call=>call[0])).toEqual(["create_customer_booking_atomic","create_reservation_with_email_atomic"]);
   });
-  it("saves optional email in the atomic booking call", async () => {
+  it("saves required email in the atomic booking call", async () => {
     const response = await POST(new NextRequest("http://localhost/api/reservations", { method: "POST", body: JSON.stringify({ ...payload, customerEmail: " Test@example.com " }) }));
     expect(response.status).toBe(201);
     expect(rpc).toHaveBeenCalledWith("create_customer_booking_atomic", expect.objectContaining({ p_customer_email: "Test@example.com", p_store_id: "trusted", p_source: "web" }));
@@ -68,4 +68,10 @@ describe("public booking rules API", () => {
     expect((await post()).status).toBe(500); expect(rpc).not.toHaveBeenCalled();
     expect((await GET()).status).toBe(503);
   });
+});
+it.each([undefined,null,'','   '])('requires an email even when a phone exists (%j)',async customerEmail=>{
+ const r=await POST(new NextRequest('http://localhost/api/reservations',{method:'POST',body:JSON.stringify({...payload,customerEmail})}));expect(r.status).toBe(400);expect(rpc).not.toHaveBeenCalled();
+});
+it.each([undefined,null,'','   '])('accepts a valid email with an omitted phone (%j)',async customerPhone=>{
+ const r=await POST(new NextRequest('http://localhost/api/reservations',{method:'POST',body:JSON.stringify({...payload,customerPhone})}));expect(r.status).toBe(201);expect(rpc).toHaveBeenCalledWith('create_customer_booking_atomic',expect.objectContaining({p_customer_phone:'',p_customer_email:'guest@example.com'}));
 });
