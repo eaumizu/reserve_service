@@ -1,3 +1,4 @@
+import {refreshCalendarBusyForStart} from "../../../lib/google-calendar-busy";
 import {dispatchReservationNotifications} from "../../../lib/email-booking-events";
 export const maxDuration=60;
 import { NextRequest, NextResponse } from "next/server";
@@ -45,12 +46,13 @@ export async function POST(request: NextRequest) {
     if(body.action==="reschedule" && body.staffId!==undefined &&
       (typeof body.staffId!=="string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(body.staffId)))
       return respond({error:"担当者名付きの空き枠から選んでください。"},400);
+    if(body.action==="reschedule"){try{await refreshCalendarBusyForStart(booking.storeId,body.startAt);}catch{return respond({error:"Googleカレンダーの予定を確認できません。時間をおいて空き枠を再取得してください。"},503);}}
     const result=await db.rpc(body.action==="reschedule"?"manage_customer_booking_with_staff_atomic":"manage_customer_booking_atomic",{p_token_hash:hash,p_action:body.action,
       p_expected_updated_at:body.expectedUpdatedAt,p_start_at:body.action==="reschedule"?body.startAt:null,
       ...(body.action==="reschedule"?{p_staff_id:body.staffId??booking.staffId}:{})});
     if (result.error) {
       if (result.error.message.includes("booking_not_found")) return respond({error:"予約リンクが無効です。店舗にお問い合わせください。"},404);
-      if (["booking_changed","reservation_changed","booking_closed","booking_window_closed","time_slot_unavailable","outside_business_hours","invalid_staff_service"].some(code=>result.error!.message.includes(code)))
+      if (["booking_changed","reservation_changed","booking_closed","booking_window_closed","time_slot_unavailable","outside_business_hours","invalid_staff_service","calendar_busy_unavailable"].some(code=>result.error!.message.includes(code)))
         return respond({error:"予約の状態や空き枠が変わったか、受付期限を過ぎました。予約を再読み込みしてください。"},409);
       throw result.error;
     }

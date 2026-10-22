@@ -1,3 +1,4 @@
+vi.mock("../lib/google-calendar-busy",()=>({refreshCalendarBusyForStart:async()=>[]}));
 import {beforeEach,expect,it,vi} from 'vitest';
 import {NextRequest} from 'next/server';
 const {rpc,customer,calendar}=vi.hoisted(()=>({rpc:vi.fn(),customer:vi.fn(),calendar:vi.fn()}));

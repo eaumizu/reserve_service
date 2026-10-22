@@ -1,3 +1,5 @@
+const {googleBusy}=vi.hoisted(()=>({googleBusy:vi.fn()}));
+vi.mock("../lib/google-calendar-busy",()=>({refreshCalendarBusy:googleBusy}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const { from } = vi.hoisted(() => ({ from: vi.fn() }));
 vi.mock("../lib/supabase-server", () => ({ supabaseServer: () => ({ from }) }));
@@ -15,6 +17,7 @@ const queries: { table: string; fields: string; eq: ReturnType<typeof vi.fn>; lt
 const store = "verified-store", service = "service", staff = "staff";
 const jst = (time: string) => `2030-01-01T${time}:00+09:00`;
 beforeEach(() => {
+  googleBusy.mockReset();googleBusy.mockResolvedValue([]);
   reservations = []; blocks = []; hours = [{ start_time: "09:00:00", end_time: "11:00:00" }];
   settingsError = false; conflictsError = false; assigned = true; bufferBefore = 0; queries.length = 0;
   from.mockReset();
@@ -110,4 +113,12 @@ describe("Japan-time admin availability", () => {
     await adminAvailableStarts(store, service, staff, "2030-01-01", "current-reservation");
     expect(queries.find(q => q.fields.includes("duration_minutes"))!.eq).not.toHaveBeenCalledWith("active", true);
   });
+});
+
+it('blocks Google busy intervals including cleanup, with half-open boundaries',async()=>{
+ googleBusy.mockResolvedValue([{start:jst('09:30'),end:jst('10:00')}]);
+ expect(await adminAvailableStarts(store,service,staff,'2030-01-01')).toEqual([new Date(jst('10:00')).toISOString(),new Date(jst('10:15')).toISOString()]);
+});
+it('does not display bookable slots when Google checks fail',async()=>{
+ googleBusy.mockRejectedValue(new Error('google unavailable'));await expect(adminAvailableStarts(store,service,staff,'2030-01-01')).rejects.toThrow();
 });
