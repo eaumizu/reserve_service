@@ -18,3 +18,6 @@ it("reports actionable provider permission errors without exposing response bodi
  vi.mocked(fetch).mockResolvedValue(new Response('secret provider details',{status:403}));rpc.mockImplementation(async n=>({data:n==="claim_store_booking_notification"?job:{pending:1},error:null}));
  const result=await dispatchStoreBookingNotifications('trusted','reservation');expect(result.error).toContain('RESEND_API_KEY');expect(result.error).not.toContain('secret');expect(rpc).toHaveBeenCalledWith('finish_store_booking_notification',expect.objectContaining({p_sent:false}));
 });
+it('includes the required email and clearly marks an omitted phone',()=>{
+ const text=storeBookingMessage({...job,payload:{...job.payload,phone:'',customerEmail:'guest@example.com'}});expect(text).toContain('電話番号：記載なし');expect(text).toContain('メール：guest@example.com');
+});

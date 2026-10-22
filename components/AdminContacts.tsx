@@ -30,9 +30,9 @@ export function AdminContacts({auth,onBusy}:{auth:SupabaseClient;onBusy:(v:boole
  {!needs.length?<p>連絡が必要な予約はありません。</p>:<><h3>対応が必要な連絡（{needs.length}件）</h3>{needs.map(row=>{
  const reminder=!row.kind,phone=row.state==="phone"||row.state==="expired",sending=row.state==="sending";
  const retry=reminder?row.state==="pending"&&data.enabled:row.canRetry;
- const contact=reminder?row.state==="phone"||row.state==="pending"&&row.failed:row.canContact;
+ const contact=Boolean(row.phone)&&(reminder?row.state==="phone"||row.state==="pending"&&row.failed:row.canContact);
  return <article className="card" key={`${row.channel}:${row.id}`}><strong>{row.customerName}様</strong><p>{japan(row.startAt)} ／ {kind(row)}</p>
- <p>{sending?"送信処理中":phone?"電話連絡が必要":`${row.channel==="line"?"LINE":"メール"}の未送信通知があります`}</p>
+ <p>{sending?"送信処理中":phone?(row.phone?"電話連絡が必要":"連絡先を予約詳細で確認してください"):`${row.channel==="line"?"LINE":"メール"}の未送信通知があります`}</p>
  <div className="grid">{retry&&data.canManage&&<button disabled={busy} onClick={()=>{if(window.confirm(reminder?"未送信の前日通知を送信しますか？対象の予約全体に送信します。":"この予約の未送信通知を再送しますか？"))void run(row,"retry");}}>再送</button>}
  {contact&&<button disabled={busy} onClick={()=>{if(window.confirm(`${row.customerName}様に電話で連絡できましたか？不在の場合は記録せず残してください。`))void run(row,"contacted");}}>電話で連絡済みにする</button>}</div>
  <details><summary>詳細</summary><p>{row.serviceName} ／ {row.staffName}</p>{row.phone&&<a href={`tel:${row.phone.replace(/[^+0-9]/g,"")}`}>{row.phone}</a>}</details></article>;

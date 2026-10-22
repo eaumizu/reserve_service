@@ -10,7 +10,7 @@ begin
  old_ticket:=begin_store_calendar_busy(s,day,rev);ticket:=begin_store_calendar_busy(s,day,rev);
  if save_store_calendar_busy(s,day,rev,old_ticket,'[]') then raise exception 'old refresh overwrote newer one';end if;
  if not save_store_calendar_busy(s,day,rev,ticket,jsonb_build_array(jsonb_build_object('start',t,'end',t+interval '1 hour'))) then raise exception 'snapshot not saved';end if;
- begin perform create_reservation_atomic(s,sv,st,t,'予定確認','09000000261','web',null);raise exception 'busy booking allowed';exception when others then if sqlerrm<>'time_slot_unavailable' then raise;end if;end;
+ begin perform create_reservation_with_email_atomic(s,sv,st,t,'予定確認','09000000261','web',null,'test@example.com');raise exception 'busy booking allowed';exception when others then if sqlerrm<>'time_slot_unavailable' then raise;end if;end;
  -- A cleanup interval that reaches a Google event must also be blocked.
  update services set duration_minutes=30,buffer_before=0,buffer_after=15 where id=sv;
  begin perform create_reservation_atomic(s,sv,st,t-interval '30 minutes','予定確認','09000000261','phone',null);raise exception 'cleanup overlap allowed';exception when others then if sqlerrm<>'time_slot_unavailable' then raise;end if;end;

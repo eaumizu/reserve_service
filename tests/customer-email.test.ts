@@ -12,3 +12,8 @@ describe("booking email contact", () => {
     expect(parseCustomerEmail(value)).toBeUndefined();
   });
 });
+
+describe('optional booking phone',()=>{
+ it.each([undefined,null,'','   '])('normalizes an omitted phone %j to empty',async value=>{const {parseCustomerPhone}=await import('../lib/reservations/email');expect(parseCustomerPhone(value)).toBe('');});
+ it('validates entered phones and normalizes full-width digits',async()=>{const {parseCustomerPhone}=await import('../lib/reservations/email');expect(parseCustomerPhone('０９０-１２３４-５６７８')).toBe('090-1234-5678');for(const v of [123,{},'abc','123\n456','x'.repeat(51)])expect(parseCustomerPhone(v)).toBeUndefined();});
+});

@@ -1,5 +1,5 @@
 "use client";
-import { parseCustomerEmail } from "../lib/reservations/email";
+import { parseCustomerEmail,parseCustomerPhone } from "../lib/reservations/email";
 import { useEffect, useState } from "react";
 import type { BookingRules } from "../lib/booking-rules";
 type Service = { id: string; name: string; duration_minutes: number; price: number };
@@ -65,13 +65,15 @@ export function BookingFlow() {
       {date && <div className="grid">{slots.map(s => <button className={slot?.startAt === s.startAt && slot.staffId === s.staffId ? "selected" : ""} key={s.staffId + s.startAt} onClick={() => setSlot(s)}>{new Date(s.startAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}{s.staffName&&<><br /><small>{s.staffName}</small></>}</button>)}</div>}
       {!loading && service && date && !slots.length && !error && <p>この日に受付できる空き枠はありません。別の日付を選択してください。</p>}
       <label>お名前<input value={name} onChange={e => setName(e.target.value)} /></label>
-      <label>電話番号<input inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} /></label>
-      <label>メールアドレス（任意）<input type="email" autoComplete="email" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
-      <p className="muted">店舗からの連絡先として保存します。自動メール通知はまだ行いません。</p>
-      <button className="primary" disabled={parseCustomerEmail(email) === undefined || !rules || !service || !slot || !name.trim() || !phone.trim() || loading} onClick={() => setStage("confirm")}>確認画面へ</button>
+      <label>電話番号（任意）<input type="tel" autoComplete="tel" maxLength={50} inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} /></label>
+      <label>メールアドレス（必須）<input required type="email" autoComplete="email" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
+      <p className="muted">予約確認・変更・キャンセルや前日のご案内をメールでお送りします。受信できるメールアドレスをご入力ください。</p>
+      {parseCustomerPhone(phone)===undefined&&<p className="error">電話番号を確認してください。</p>}
+      {email.trim()&&!parseCustomerEmail(email)&&<p className="error">メールアドレスを確認してください。</p>}
+      <button className="primary" disabled={!parseCustomerEmail(email) || parseCustomerPhone(phone)===undefined || !rules || !service || !slot || !name.trim() || loading} onClick={() => setStage("confirm")}>確認画面へ</button>
     </>}
     {stage === "confirm" && <>
-      <p>{service?.name}<br />{slot && new Date(slot.startAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}{slot?.staffName&&`／${slot.staffName}`}<br />{name} 様（{phone}）<br />メール：{email.trim() || "記載なし"}</p>
+      <p>{service?.name}<br />{slot && new Date(slot.startAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}{slot?.staffName&&`／${slot.staffName}`}<br />{name} 様{phone.trim()&&`（${phone}）`}<br />メール：{email.trim() || "記載なし"}</p>
       <div className="grid"><button disabled={busy} onClick={() => setStage("form")}>戻る</button><button className="primary" disabled={busy} onClick={submit}>{busy ? "予約を確定中…" : "予約を確定する"}</button></div>
     </>}
   </section>;

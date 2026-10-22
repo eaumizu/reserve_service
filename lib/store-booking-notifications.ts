@@ -2,13 +2,13 @@ import {resendFetch,requireResendResponse,ResendRequestError} from "./resend-req
 import {supabaseServer} from "./supabase-server";
 import {emailPlatformReady,configuredEmailSender} from "./store-email";
 import {bookingSiteOrigin} from "./line-booking-notification";
-export type StoreBookingNotification={id:string;storeId:string;reservationId:string;leaseId:string;recipient:string;kind:"created"|"changed"|"cancelled";payload:{storeName:string;customerName:string;phone:string;serviceName:string;staffName:string;startAt:string;endAt:string;oldStartAt?:string;oldEndAt?:string;oldStaffName?:string;oldServiceName?:string;from:string;replyTo:string;senderRevision:string;domainId:string}};
+export type StoreBookingNotification={id:string;storeId:string;reservationId:string;leaseId:string;recipient:string;kind:"created"|"changed"|"cancelled";payload:{storeName:string;customerName:string;phone:string;customerEmail?:string|null;serviceName:string;staffName:string;startAt:string;endAt:string;oldStartAt?:string;oldEndAt?:string;oldStaffName?:string;oldServiceName?:string;from:string;replyTo:string;senderRevision:string;domainId:string}};
 export const bookingEmailAddress=(v:unknown):v is string=>typeof v==="string"&&v.length<=254&&/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v);
 export function storeBookingMessage(job:StoreBookingNotification){
  const p=job.payload,japan=(v:string)=>new Date(v).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});
  const labels={created:"新しい予約が入りました。",changed:"予約が変更されました。",cancelled:"予約がキャンセルされました。"};
  const old=job.kind==="changed"&&p.oldStartAt?`\n変更前：${japan(p.oldStartAt)}${p.oldEndAt?` ～ ${japan(p.oldEndAt)}`:""}\n変更前メニュー：${p.oldServiceName??""}${p.oldStaffName?`\n変更前担当：${p.oldStaffName}`:""}\n`:"";
- return `${p.storeName}\n${labels[job.kind]}\n\nお客様：${p.customerName}\n電話番号：${p.phone}${old}\n予約日時：${japan(p.startAt)} ～ ${japan(p.endAt)}（日本時間）\nメニュー：${p.serviceName}${p.staffName?`\n担当：${p.staffName}`:""}\n\n管理画面で確認\n${bookingSiteOrigin()}/admin\n\n店舗スタッフ向けの通知です。予約の操作にはログインが必要です。`;
+ return `${p.storeName}\n${labels[job.kind]}\n\nお客様：${p.customerName}\n電話番号：${p.phone||"記載なし"}${p.customerEmail?`\nメール：${p.customerEmail}`:""}${old}\n予約日時：${japan(p.startAt)} ～ ${japan(p.endAt)}（日本時間）\nメニュー：${p.serviceName}${p.staffName?`\n担当：${p.staffName}`:""}\n\n管理画面で確認\n${bookingSiteOrigin()}/admin\n\n店舗スタッフ向けの通知です。予約の操作にはログインが必要です。`;
 }
 export async function sendStoreBookingNotification(job:StoreBookingNotification){
  if(!bookingEmailAddress(job.recipient))throw new Error("invalid_recipient");
