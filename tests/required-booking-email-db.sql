@@ -1,6 +1,6 @@
 begin;
 do $$
-declare s uuid:='11111111-1111-1111-1111-111111111111';sv uuid:='44444444-4444-4444-4444-444444444444';st uuid:='22222222-2222-2222-2222-222222222222';a reservations;b reservations;c reservations;t timestamptz;rev uuid;
+declare s uuid:='11111111-1111-1111-1111-111111111111';sv uuid:='44444444-4444-4444-4444-444444444444';st uuid:='22222222-2222-2222-2222-222222222222';a reservations;b reservations;c reservations;t timestamptz;rev uuid;family uuid;
 begin
  t:=((clock_timestamp() at time zone 'Asia/Tokyo')::date+8+time '10:00') at time zone 'Asia/Tokyo';
  insert into business_hours(store_id,weekday,start_time,end_time) select s,extract(dow from t at time zone 'Asia/Tokyo')::smallint,'09:00','18:00' where not exists(select 1 from business_hours where store_id=s and weekday=extract(dow from t at time zone 'Asia/Tokyo'));
@@ -13,10 +13,10 @@ begin
  b:=create_reservation_with_email_atomic(s,sv,st,t+interval '90 minutes','山田　花子',null,'web',null,'TEST@example.com');
  if a.customer_id<>b.customer_id then raise exception 'returning email customer split';end if;
  c:=create_reservation_with_email_atomic(s,sv,st,t+interval '180 minutes','山田 太郎','','web',null,'test@example.com');
- if c.customer_id=a.customer_id then raise exception 'family customers merged by email';end if;
+ if c.customer_id=a.customer_id then raise exception 'family customers merged by email';end if;family:=c.customer_id;
  c:=create_reservation_with_email_atomic(s,sv,st,t+interval '270 minutes','山田 花子','09000000271','web',null,'test@example.com');
  if c.customer_id<>a.customer_id or (select phone from customers where id=a.customer_id)<>'09000000271' then raise exception 'adding optional phone split customer';end if;
- if (customer_ledger_search(s,'TEST@example.com',0)->'rows') is null or jsonb_array_length(customer_ledger_search(s,'test@example.com',0)->'rows')<>2 then raise exception 'email ledger search missing: %, aliases: %',customer_ledger_search(s,'test@example.com',0),(select jsonb_agg(jsonb_build_object('key',phone_key,'name',name_key,'customer',customer_id)) from customer_identity_aliases where store_id=s);end if;
+ if not exists(select 1 from jsonb_array_elements(customer_ledger_search(s,'TEST@example.com',0)->'rows') x where x->>'id'=a.customer_id::text) or not exists(select 1 from jsonb_array_elements(customer_ledger_search(s,'test@example.com',0)->'rows') x where x->>'id'=family::text) then raise exception 'email ledger search missing target customers';end if;
  select profile_revision into rev from customers where id=a.customer_id;
  perform save_customer_ledger(s,a.customer_id,rev,'佐藤 花子','メモ',true);
  if resolve_booking_customer_contact(s,'佐藤花子','','test@example.com')<>a.customer_id or resolve_booking_customer_contact(s,'山田花子','','test@example.com')<>a.customer_id then raise exception 'email alias lost after name correction';end if;
