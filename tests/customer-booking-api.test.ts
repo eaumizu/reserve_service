@@ -1,3 +1,4 @@
+vi.mock("../lib/google-calendar-busy",()=>({refreshCalendarBusyForStart:async()=>[]}));
 const {notify}=vi.hoisted(()=>({notify:vi.fn()}));
 vi.mock("../lib/line-reservation-events",()=>({dispatchLineReservationEvents:notify,LINE_EVENT_WARNING:"pending"}));
 import {beforeEach,describe,expect,it,vi} from "vitest";

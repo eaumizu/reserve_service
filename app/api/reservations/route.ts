@@ -1,3 +1,4 @@
+import {refreshCalendarBusyForStart} from "../../../lib/google-calendar-busy";
 import {dispatchCalendarJobs} from "../../../lib/google-calendar";
 import {dispatchStoreBookingNotifications} from "../../../lib/store-booking-notifications";
 import {emailBookingTokenCipher,dispatchEmailBookingEvents,EMAIL_EVENT_WARNING} from "../../../lib/email-booking-events";
@@ -17,6 +18,7 @@ export async function POST(request: NextRequest) {
     if (email === undefined) return NextResponse.json({ error: "メールアドレスを確認してください。" }, { status: 400 });
     if (!isGridTimestamp(body.startAt)) return NextResponse.json({ error: "開始時間は15分刻みの空き枠から選択してください。" }, { status: 400 });
     if (!acceptsWebBooking(body.startAt, await readBookingRules(storeId))) return NextResponse.json({ error: "予約受付期間または締め切りを過ぎています。別の空き枠を選択してください。" }, { status: 409 });
+    try{await refreshCalendarBusyForStart(storeId,body.startAt);}catch{return NextResponse.json({error:"Googleカレンダーの予定を確認できません。時間をおいて空き枠を再取得してください。"},{status:503});}
     const token=createCustomerToken();
     const db=supabaseServer();
     const tokenCipher=emailBookingTokenCipher(storeId,token,email);

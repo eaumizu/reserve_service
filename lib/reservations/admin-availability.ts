@@ -1,3 +1,4 @@
+import {refreshCalendarBusy} from "../google-calendar-busy";
 import { TIME_STEP_MS, TIME_STEP_MINUTES } from "./time-grid";
 import { supabaseServer } from "../supabase-server";
 import { addMinutes, findAvailableStarts } from "./availability";
@@ -39,7 +40,9 @@ export async function adminAvailableStarts(storeId: string, serviceId: string, s
       .lt("start_at", dayEnd.toISOString()).gt("end_at", windowStart.toISOString()),
   ]);
   if (reservationsResult.error || blocksResult.error) throw new Error("Availability conflicts failed");
+  const googleBusy = await refreshCalendarBusy(storeId,date);
   const occupied = [
+    ...googleBusy.map(row=>({start:new Date(row.start),end:new Date(row.end)})),
     ...(reservationsResult.data ?? []).map(row => {
       const buffers = Array.isArray(row.services) ? row.services[0] : row.services;
       if (!buffers) throw new Error("Reservation service missing");

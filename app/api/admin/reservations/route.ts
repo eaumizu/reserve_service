@@ -1,3 +1,4 @@
+import {refreshCalendarBusyForStart} from "../../../../lib/google-calendar-busy";
 import {dispatchCalendarJobs} from "../../../../lib/google-calendar";
 import {dispatchStoreBookingNotifications} from "../../../../lib/store-booking-notifications";
 import {createCustomerToken,hashCustomerToken} from "../../../../lib/customer-booking";
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest) {
     if (Date.parse(body.startAt) % TIME_STEP_MS !== 0) {
       return NextResponse.json({ error: "開始時間は15分刻みの空き枠から選択してください。" }, { status: 400 });
     }
+    try{await refreshCalendarBusyForStart(staff.storeId,body.startAt);}catch{return NextResponse.json({error:"Googleカレンダーの予定を確認できません。時間をおいて空き枠を再取得してください。"},{status:503});}
     const token=createCustomerToken(),cipher=emailBookingTokenCipher(staff.storeId,token,email);
     const params={ ...(email ? { p_customer_email: email } : {}), p_store_id: staff.storeId, p_service_id: body.serviceId, p_staff_id: body.staffId, p_start_at: body.startAt, p_customer_name: body.customerName.trim(), p_customer_phone: body.customerPhone.trim(), p_source: body.source, p_note: body.note ?? null };
     let result=await supabaseServer().rpc(cipher?"create_customer_booking_atomic":email?"create_reservation_with_email_atomic":"create_reservation_atomic",{...params,...(cipher?{p_token_hash:hashCustomerToken(token),p_token_cipher:cipher}:{})});

@@ -1,3 +1,4 @@
+export const maxDuration=60;
 import { NextRequest, NextResponse } from "next/server";
 import { adminAvailableStarts } from "../../../lib/reservations/admin-availability";
 import { isBookingDate } from "../../../lib/reservations/date";

@@ -1,3 +1,4 @@
+import {refreshCalendarBusyForStart} from "../../../../../lib/google-calendar-busy";
 import {dispatchReservationNotifications} from "../../../../../lib/email-booking-events";
 export const maxDuration=60;
 import { TIME_STEP_MS } from "../../../../../lib/reservations/time-grid";
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest) {
         typeof body.expectedUpdatedAt !== "string" || !timestamp.test(body.expectedUpdatedAt) || !Number.isFinite(Date.parse(body.expectedUpdatedAt))) {
       return NextResponse.json({ error: "担当者と15分刻みの空き時間を選択してください。" }, { status: 400, headers });
     }
+    try{await refreshCalendarBusyForStart(staff.storeId,body.startAt);}catch{return NextResponse.json({error:"Googleカレンダーの予定を確認できません。時間をおいて空き枠を再取得してください。"},{status:503});}
     const { data, error } = await supabaseServer().rpc("reschedule_reservation_atomic", {
       p_store_id: staff.storeId, p_reservation_id: body.reservationId, p_staff_id: body.staffId,
       p_start_at: body.startAt, p_expected_updated_at: body.expectedUpdatedAt,

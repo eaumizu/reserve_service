@@ -15,6 +15,10 @@ async function handle(req:NextRequest,write:boolean){
     const id=body.calendarId;if(!validCalendarId(id))return respond({error:"カレンダーIDを確認してください。"},400);
     const state=newCalendarAuthorization(),r=await db.rpc("issue_store_calendar_oauth",{p_store_id:actor.storeId,p_user_id:actor.userId,p_state_hash:hashCalendarState(state.state),p_calendar_id:id,p_verifier_cipher:encryptCalendarSecret(actor.storeId,state.verifier)});if(r.error)throw r.error;
     const response=respond({url:state.url});response.cookies.set(CALENDAR_STATE_COOKIE,state.state,{httpOnly:true,secure:true,sameSite:"lax",path:"/api/admin/calendar",maxAge:600});return response;
+   }else if(body?.action==="busy"){
+    if(typeof body.enabled!=="boolean")return respond({error:"受付停止の設定を確認してください。"},400);
+    if(body.enabled&&!calendarPlatformReady())return respond({error:"Google連携の準備が未完了です。"},409);
+    const r=await db.rpc("set_store_calendar_busy",{p_store_id:actor.storeId,p_enabled:body.enabled});if(r.error)throw r.error;
    }else if(body?.action==="disconnect"){
     const r=await db.rpc("disconnect_store_calendar",{p_store_id:actor.storeId});if(r.error)throw r.error;
    }else if(body?.action==="sync"){
@@ -24,9 +28,10 @@ async function handle(req:NextRequest,write:boolean){
    else return respond({error:"操作を確認してください。"},400);
   }
   const d=await db.rpc("store_calendar_dashboard",{p_store_id:actor.storeId});if(d.error)throw d.error;
+  const credentials=await db.rpc("store_calendar_credentials",{p_store_id:actor.storeId});if(credentials.error)throw credentials.error;
   let callbackUrl="";try{callbackUrl=calendarCallbackUrl();}catch{}
-  return respond({...d.data,platformReady:calendarPlatformReady(),callbackUrl,delivery});
- }catch{return respond({error:"Google連携の設定を取得できません。0024のSQLをご確認ください。"},503);}
+  return respond({...d.data,busyEnabled:credentials.data?.busyEnabled===true,platformReady:calendarPlatformReady(),callbackUrl,delivery});
+ }catch{return respond({error:"Google連携の設定を取得できません。0024・0026のSQLをご確認ください。"},503);}
 }
 export async function GET(req:NextRequest){return handle(req,false);}
 export async function POST(req:NextRequest){return handle(req,true);}
