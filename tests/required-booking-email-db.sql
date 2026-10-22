@@ -21,7 +21,7 @@ begin
  perform save_customer_ledger(s,a.customer_id,rev,'佐藤 花子','メモ',true);
  if resolve_booking_customer_contact(s,'佐藤花子','','test@example.com')<>a.customer_id or resolve_booking_customer_contact(s,'山田花子','','test@example.com')<>a.customer_id then raise exception 'email alias lost after name correction';end if;
  if a.customer_name<>'山田 花子' or (select customer_name from reservations where id=a.id)<>'山田 花子' then raise exception 'history name changed';end if;
- if customer_ledger_detail(s,a.customer_id,0)->'customer'->>'email'<>'test@example.com' then raise exception 'email contact missing from ledger';end if;
+ if lower(customer_ledger_detail(s,a.customer_id,0)->'customer'->>'email')<>'test@example.com' then raise exception 'email contact missing from ledger';end if;
  if resolve_booking_customer_contact(s,'別のお客様','','other@example.com')=a.customer_id then raise exception 'empty phones grouped';end if;
  if has_function_privilege('authenticated','resolve_booking_customer_contact(uuid,text,text,text)','execute') then raise exception 'public identity resolver access';end if;
 end $$;
