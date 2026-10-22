@@ -16,7 +16,7 @@ begin
  if c.customer_id=a.customer_id then raise exception 'family customers merged by email';end if;
  c:=create_reservation_with_email_atomic(s,sv,st,t+interval '270 minutes','山田 花子','09000000271','web',null,'test@example.com');
  if c.customer_id<>a.customer_id or (select phone from customers where id=a.customer_id)<>'09000000271' then raise exception 'adding optional phone split customer';end if;
- if (customer_ledger_search(s,'TEST@example.com',0)->'rows') is null or jsonb_array_length(customer_ledger_search(s,'test@example.com',0)->'rows')<>2 then raise exception 'email ledger search missing';end if;
+ if (customer_ledger_search(s,'TEST@example.com',0)->'rows') is null or jsonb_array_length(customer_ledger_search(s,'test@example.com',0)->'rows')<>2 then raise exception 'email ledger search missing: %, aliases: %',customer_ledger_search(s,'test@example.com',0),(select jsonb_agg(jsonb_build_object('key',phone_key,'name',name_key,'customer',customer_id)) from customer_identity_aliases where store_id=s);end if;
  select profile_revision into rev from customers where id=a.customer_id;
  perform save_customer_ledger(s,a.customer_id,rev,'佐藤 花子','メモ',true);
  if resolve_booking_customer_contact(s,'佐藤花子','','test@example.com')<>a.customer_id or resolve_booking_customer_contact(s,'山田花子','','test@example.com')<>a.customer_id then raise exception 'email alias lost after name correction';end if;
