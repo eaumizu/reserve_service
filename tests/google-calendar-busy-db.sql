@@ -11,12 +11,17 @@ begin
  if save_store_calendar_busy(s,day,rev,old_ticket,'[]') then raise exception 'old refresh overwrote newer one';end if;
  if not save_store_calendar_busy(s,day,rev,ticket,jsonb_build_array(jsonb_build_object('start',t,'end',t+interval '1 hour'))) then raise exception 'snapshot not saved';end if;
  begin perform create_reservation_with_email_atomic(s,sv,st,t,'予定確認','09000000261','web',null,'test@example.com');raise exception 'busy booking allowed';exception when others then if sqlerrm<>'time_slot_unavailable' then raise;end if;end;
+ -- The actual public booking RPC must reject a slot that was selected before Google changed.
+ begin perform create_customer_booking_atomic(s,sv,st,t,'Google重複テスト','','web',null,'busy@example.com',repeat('b',64));raise exception 'public customer booking bypassed Google busy';exception when others then if sqlerrm<>'time_slot_unavailable' then raise;end if;end;
  -- A cleanup interval that reaches a Google event must also be blocked.
  update services set duration_minutes=30,buffer_before=0,buffer_after=15 where id=sv;
  begin perform create_reservation_atomic(s,sv,st,t-interval '30 minutes','予定確認','09000000261','phone',null);raise exception 'cleanup overlap allowed';exception when others then if sqlerrm<>'time_slot_unavailable' then raise;end if;end;
  r:=create_reservation_atomic(s,sv,st,t-interval '45 minutes','予定確認','09000000261','phone',null);
  -- Exact adjacency at the cleanup end is permitted; a later move into busy time is not.
  begin update reservations set start_at=t,end_at=t+interval '30 minutes' where id=r.id;raise exception 'move into Google busy allowed';exception when others then if sqlerrm<>'time_slot_unavailable' then raise;end if;end;
+ begin perform reschedule_reservation_atomic(s,r.id,st,t,r.updated_at);raise exception 'admin move bypassed Google busy';exception when others then if sqlerrm<>'time_slot_unavailable' then raise;end if;end;
+ perform issue_customer_booking_access(s,r.id,repeat('c',64));
+ begin perform manage_customer_booking_with_staff_atomic(repeat('c',64),'reschedule',r.updated_at,t,st);raise exception 'customer move bypassed Google busy';exception when others then if sqlerrm<>'time_slot_unavailable' then raise;end if;end;
  update store_calendar_busy_days set started_at=clock_timestamp()-interval '2 minutes' where store_id=s;
  begin perform create_reservation_atomic(s,sv,st,t+interval '2 hours','別予約','09000000262','phone',null);raise exception 'stale snapshot allowed';exception when others then if sqlerrm<>'calendar_busy_unavailable' then raise;end if;end;
  update reservations set status='cancelled' where id=r.id;

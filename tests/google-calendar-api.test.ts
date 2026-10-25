@@ -1,6 +1,7 @@
 import {beforeEach,expect,it,vi} from "vitest";
 import {NextRequest} from "next/server";
-const {auth,rpc,getUser}=vi.hoisted(()=>({auth:vi.fn(),rpc:vi.fn(),getUser:vi.fn()}));
+const {auth,rpc,getUser,refreshBusy}=vi.hoisted(()=>({auth:vi.fn(),rpc:vi.fn(),getUser:vi.fn(),refreshBusy:vi.fn()}));
+vi.mock("../lib/google-calendar-busy",()=>({refreshCalendarBusy:refreshBusy}));
 vi.mock("../lib/admin-auth",()=>({authorizeStaff:auth}));vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc,auth:{admin:{getUserById:getUser}}})}));vi.mock("../lib/line-booking-notification",()=>({bookingSiteOrigin:()=>"https://booking.example.com"}));
 import {encryptCalendarSecret} from "../lib/google-calendar";
 import {GET,POST} from "../app/api/admin/calendar/route";
@@ -18,4 +19,20 @@ it('only accepts an explicit busy flag and scopes it to the authenticated store'
  expect((await POST(req({action:'busy',enabled:'true'}))).status).toBe(400);
  expect((await POST(req({action:'busy',enabled:true,storeId:'other'}))).status).toBe(200);
  expect(rpc).toHaveBeenCalledWith('set_store_calendar_busy',{p_store_id:'trusted',p_enabled:true});
+});
+it('checks actual Google busy times only for the admin store and selected day without sending notifications',async()=>{
+ const credentials={busyEnabled:true,refreshCipher:'private-cipher',revision:'private-revision'};
+ rpc.mockImplementation(async n=>({data:n==='store_calendar_credentials'?credentials:{connection:{calendarId:'calendar',calendarName:'店舗予約'},pending:0,failed:0},error:null}));
+ refreshBusy.mockResolvedValue([{start:'2030-01-01T01:00:00Z',end:'2030-01-01T02:00:00Z'},{start:'2030-01-02T01:00:00Z',end:'2030-01-02T02:00:00Z'}]);
+ const r=await POST(req({action:'check-busy',date:'2030-01-01',storeId:'other'}));expect(r.status).toBe(200);
+ const body=await r.json();expect(body.busyCheck.intervals).toEqual([{start:'2030-01-01T01:00:00Z',end:'2030-01-01T02:00:00Z'}]);
+ expect(refreshBusy).toHaveBeenCalledExactlyOnceWith('trusted','2030-01-01');expect(JSON.stringify(body)).not.toContain('private-');
+ expect(rpc.mock.calls.some(c=>/claim|queue|finish|save/.test(c[0]))).toBe(false);expect(fetch).not.toHaveBeenCalled();
+});
+it('rejects invalid check dates, disconnected settings, and failed Google reads',async()=>{
+ expect((await POST(req({action:'check-busy',date:'2030-02-30'}))).status).toBe(400);expect(refreshBusy).not.toHaveBeenCalled();
+ rpc.mockResolvedValue({data:{busyEnabled:false}});expect((await POST(req({action:'check-busy',date:'2030-01-01'}))).status).toBe(409);expect(refreshBusy).not.toHaveBeenCalled();
+ rpc.mockResolvedValue({data:{busyEnabled:true}});refreshBusy.mockRejectedValue(new Error('Google permission lost'));
+ expect((await POST(req({action:'check-busy',date:'2030-01-01'}))).status).toBe(503);
+ auth.mockResolvedValue({role:'staff'});refreshBusy.mockClear();expect((await POST(req({action:'check-busy',date:'2030-01-01'}))).status).toBe(403);expect(refreshBusy).not.toHaveBeenCalled();
 });

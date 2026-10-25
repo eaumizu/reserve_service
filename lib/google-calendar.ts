@@ -13,10 +13,10 @@ export function newCalendarAuthorization(){
  return {state,verifier,url:`https://accounts.google.com/o/oauth2/v2/auth?${query}`};
 }
 export async function googleCalendarToken(fields:Record<string,string>){
- const r=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({...fields,client_id:process.env.GOOGLE_CALENDAR_CLIENT_ID!,client_secret:process.env.GOOGLE_CALENDAR_CLIENT_SECRET!}),redirect:"error",signal:AbortSignal.timeout(6000)});
+ const r=await fetch("https://oauth2.googleapis.com/token",{method:"POST",cache:"no-store",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({...fields,client_id:process.env.GOOGLE_CALENDAR_CLIENT_ID!,client_secret:process.env.GOOGLE_CALENDAR_CLIENT_SECRET!}),redirect:"error",signal:AbortSignal.timeout(6000)});
  if(!r.ok)throw new Error("google_auth_failed");const v=await r.json();if(typeof v.access_token!=="string")throw new Error("google_auth_failed");return v as {access_token:string;refresh_token?:string};
 }
-export async function calendarFetch(token:string,path:string,method="GET",body?:unknown){return fetch(`https://www.googleapis.com/calendar/v3${path}`,{method,headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},...(body?{body:JSON.stringify(body)}:{}),redirect:"error",signal:AbortSignal.timeout(6000)});}
+export async function calendarFetch(token:string,path:string,method="GET",body?:unknown){return fetch(`https://www.googleapis.com/calendar/v3${path}`,{method,cache:"no-store",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},...(body?{body:JSON.stringify(body)}:{}),redirect:"error",signal:AbortSignal.timeout(6000)});}
 export {encryptLineCredential as encryptCalendarSecret,decryptLineCredential as decryptCalendarSecret};
 export type CalendarJob={storeId:string;reservationId:string;version:string;leaseId:string;connectionRevision:string;status:string;customerName:string;serviceName:string;staffName:string;startAt:string;endAt:string};
 export const calendarEventId=(j:Pick<CalendarJob,"storeId"|"reservationId">)=>hashCalendarState(`${j.storeId}:${j.reservationId}`);
