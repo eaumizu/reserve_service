@@ -21,6 +21,12 @@ export function BookingFlow() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [availabilityVersion,setAvailabilityVersion]=useState(0);
+  useEffect(()=>{
+    const resume=()=>{if(document.visibilityState!=="hidden"&&stage==="form"&&service&&date)setAvailabilityVersion(v=>v+1);};
+    window.addEventListener("focus",resume);window.addEventListener("pageshow",resume);document.addEventListener("visibilitychange",resume);
+    return()=>{window.removeEventListener("focus",resume);window.removeEventListener("pageshow",resume);document.removeEventListener("visibilitychange",resume);};
+  },[stage,service,date]);
   useEffect(() => {
     let active = true;
     Promise.all([fetch("/api/catalog", { cache: "no-store" }), fetch("/api/booking-rules", { cache: "no-store" })])
@@ -33,8 +39,8 @@ export function BookingFlow() {
   }, []);
   useEffect(() => {
     let active = true;
-    setSlot(undefined); setSlots([]); setError("");
-    if (!service || !date || !rules) return;
+    setSlot(undefined); setSlots([]);
+    if (!service || !date || !rules) {setLoading(false);return;}
     setLoading(true);
     fetch(`/api/availability?serviceId=${service.id}&date=${date}`, { cache: "no-store" })
       .then(async response => { const result = await response.json(); if (!response.ok) throw new Error(result.error); return result; })
@@ -42,14 +48,14 @@ export function BookingFlow() {
       .catch(e => { if (active) setError(e instanceof Error ? e.message : "空き枠を取得できません。"); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [service, date, rules]);
+  }, [service, date, rules, availabilityVersion]);
   async function submit() {
     if (busy || !service || !slot) return;
     setBusy(true); setError("");
     try {
       const response = await fetch("/api/reservations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ storeId: process.env.NEXT_PUBLIC_DEFAULT_STORE_ID, serviceId: service.id, staffId: slot.staffId, startAt: slot.startAt, customerName: name, customerPhone: phone, customerEmail: email.trim(), source: "web" }) });
       if (response.ok) { const result=await response.json();setManagePath(result.managePath??null);setNotificationWarning(result.notificationWarning??null);setStage("done"); }
-      else { setError((await response.json()).error); setStage("form"); setSlot(undefined); setSlots([]); }
+      else { setError((await response.json()).error); setStage("form"); setSlot(undefined); setSlots([]);setAvailabilityVersion(v=>v+1); }
     } catch { setError("通信エラーです。予約結果を店舗に確認してください。"); }
     finally { setBusy(false); }
   }
@@ -59,10 +65,11 @@ export function BookingFlow() {
     {rules && <p className="muted">Web予約は日本時間で今日から{rules.advance_days}日先まで、施術開始の{rules.cutoff_minutes === 0 ? "直前" : `${rules.cutoff_minutes}分前`}まで受付します。</p>}
     {error && <p className="error" role="alert">{error}</p>}
     {stage === "form" && <>
-      <label>施術メニュー<select value={service?.id ?? ""} onChange={e => { setSlot(undefined); setService(services.find(s => s.id === e.target.value)); }}><option value="">選んでください</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}（{s.duration_minutes}分・¥{s.price.toLocaleString()}）</option>)}</select></label>
-      <label>ご希望の日<input type="date" disabled={!rules} min={rules?.minDate} max={rules?.maxDate} value={date} onChange={e => { setSlot(undefined); setDate(e.target.value); }} /></label>
+      <label>施術メニュー<select value={service?.id ?? ""} onChange={e => { setSlot(undefined);setError(""); setService(services.find(s => s.id === e.target.value)); }}><option value="">選んでください</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}（{s.duration_minutes}分・¥{s.price.toLocaleString()}）</option>)}</select></label>
+      <label>ご希望の日<input type="date" disabled={!rules} min={rules?.minDate} max={rules?.maxDate} value={date} onChange={e => { setSlot(undefined);setError(""); setDate(e.target.value); }} /></label>
+      {service&&date&&<button disabled={loading} onClick={()=>{setError("");setAvailabilityVersion(v=>v+1);}}>空き枠を更新</button>}
       {loading && <p role="status">空き枠を確認しています…</p>}
-      {date && <div className="grid">{slots.map(s => <button className={slot?.startAt === s.startAt && slot.staffId === s.staffId ? "selected" : ""} key={s.staffId + s.startAt} onClick={() => setSlot(s)}>{new Date(s.startAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}{s.staffName&&<><br /><small>{s.staffName}</small></>}</button>)}</div>}
+      {date && <div className="grid">{slots.map(s => <button className={slot?.startAt === s.startAt && slot.staffId === s.staffId ? "selected" : ""} key={s.staffId + s.startAt} onClick={() => {setSlot(s);setError("");}}>{new Date(s.startAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}{s.staffName&&<><br /><small>{s.staffName}</small></>}</button>)}</div>}
       {!loading && service && date && !slots.length && !error && <p>この日に受付できる空き枠はありません。別の日付を選択してください。</p>}
       <label>お名前<input value={name} onChange={e => setName(e.target.value)} /></label>
       <label>電話番号（任意）<input type="tel" autoComplete="tel" maxLength={50} inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} /></label>

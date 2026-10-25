@@ -3,6 +3,11 @@ import {calendarFetch,calendarPlatformReady,googleCalendarToken,decryptCalendarS
 import {isBookingDate} from './reservations/date';
 export type CalendarBusyRange={start:string;end:string};
 type Event={id?:string;status?:string;transparency?:string;start?:{date?:string;dateTime?:string;timeZone?:string};end?:{date?:string;dateTime?:string;timeZone?:string};extendedProperties?:{private?:{storeId?:string;reservationId?:string}}};
+type BookingTimes={start_at:string;end_at:string};
+function ownedReservationId(event:Event,storeId:string){
+ const own=event.extendedProperties?.private;
+ return own?.storeId===storeId&&own.reservationId&&event.id===calendarEventId({storeId,reservationId:own.reservationId})?own.reservationId:null;
+}
 function calendarMidnight(day:string,timeZone:string){
  const target=Date.parse(`${day}T00:00:00Z`);let value=target;
  const fmt=new Intl.DateTimeFormat('en-US',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
@@ -13,13 +18,15 @@ function calendarMidnight(day:string,timeZone:string){
  }
  throw new Error('invalid_google_event_time');
 }
-export function googleBusyRange(event:Event,storeId:string,timeZone="Asia/Tokyo"):CalendarBusyRange|null{
+export function googleBusyRange(event:Event,storeId:string,timeZone="Asia/Tokyo",bookings?:ReadonlyMap<string,BookingTimes>):CalendarBusyRange|null{
  if(event.status==='cancelled'||event.transparency==='transparent')return null;
- const own=event.extendedProperties?.private;
- if(own?.storeId===storeId&&own.reservationId&&event.id===calendarEventId({storeId,reservationId:own.reservationId}))return null;
  const parse=(part:Event['start'])=>part?.dateTime&&/(Z|[+-]\d\d:\d\d)$/.test(part.dateTime)?new Date(part.dateTime):part?.date&&isBookingDate(part.date)?calendarMidnight(part.date,part.timeZone??timeZone):null;
  const start=parse(event.start),end=parse(event.end);
  if(!start||!end||!Number.isFinite(+start)||!Number.isFinite(+end)||+start>=+end)throw new Error('invalid_google_event');
+ // Only the unchanged interval of a confirmed DB reservation is redundant.
+ // Google can retain our private metadata when someone moves an exported event.
+ const reservationId=ownedReservationId(event,storeId),booking=reservationId?bookings?.get(reservationId):undefined;
+ if(booking&&Date.parse(booking.start_at)===+start&&Date.parse(booking.end_at)===+end)return null;
  return {start:start.toISOString(),end:end.toISOString()};
 }
 const inFlight=new Map<string,Promise<CalendarBusyRange[]>>();
@@ -31,18 +38,27 @@ export function refreshCalendarBusy(storeId:string,day:string):Promise<CalendarB
 async function readBusy(storeId:string,day:string){
  const db=supabaseServer(),cfg=await db.rpc('store_calendar_credentials',{p_store_id:storeId});if(cfg.error)throw new Error('calendar_busy_unavailable');
  const c=cfg.data as {busyEnabled?:boolean;revision:string;calendarId:string;refreshCipher:string}|null;
- if(!c?.busyEnabled)return [];
+ if(!c||c.busyEnabled===false)return [];
+ if(c.busyEnabled!==true)throw new Error('calendar_busy_unavailable');
  if(!calendarPlatformReady())throw new Error('calendar_busy_unavailable');
  const begun=await db.rpc('begin_store_calendar_busy',{p_store_id:storeId,p_day:day,p_revision:c.revision});if(begun.error||!begun.data)throw new Error('calendar_busy_unavailable');
  const token=(await googleCalendarToken({grant_type:'refresh_token',refresh_token:decryptCalendarSecret(storeId,c.refreshCipher)})).access_token;
- const dayStart=Date.parse(`${day}T00:00:00+09:00`),ranges:CalendarBusyRange[]=[];let page:string|undefined;
+ const dayStart=Date.parse(`${day}T00:00:00+09:00`),events:{event:Event;timeZone:string}[]=[];let page:string|undefined;
  for(let n=0;n<10;n++){
   const query=new URLSearchParams({singleEvents:'true',showDeleted:'false',maxResults:'2500',timeZone:'Asia/Tokyo',timeMin:new Date(dayStart-86400000).toISOString(),timeMax:new Date(dayStart+2*86400000).toISOString(),...(page?{pageToken:page}:{})});
   const r=await calendarFetch(token,`/calendars/${encodeURIComponent(c.calendarId)}/events?${query}`);if(!r.ok)throw new Error('calendar_busy_unavailable');
   const value=await r.json();if(!Array.isArray(value.items))throw new Error('calendar_busy_unavailable');
-  for(const event of value.items){const range=googleBusyRange(event,storeId,value.timeZone??"Asia/Tokyo");if(range)ranges.push(range);}
+  for(const event of value.items)events.push({event,timeZone:value.timeZone??"Asia/Tokyo"});
   page=value.nextPageToken;if(!page)break;if(n===9||typeof page!=='string')throw new Error('calendar_busy_unavailable');
  }
+ const ids=[...new Set(events.map(({event})=>ownedReservationId(event,storeId)).filter((id):id is string=>typeof id==='string'&&/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)))];
+ const bookings=new Map<string,BookingTimes>();
+ for(let i=0;i<ids.length;i+=200){
+  const found=await db.from('reservations').select('id,start_at,end_at').eq('store_id',storeId).eq('status','confirmed').in('id',ids.slice(i,i+200));
+  if(found.error||!Array.isArray(found.data))throw new Error('calendar_busy_unavailable');
+  for(const row of found.data)bookings.set(row.id,row);
+ }
+ const ranges=events.map(({event,timeZone})=>googleBusyRange(event,storeId,timeZone,bookings)).filter((range):range is CalendarBusyRange=>range!==null);
  const saved=await db.rpc('save_store_calendar_busy',{p_store_id:storeId,p_day:day,p_revision:c.revision,p_ticket:begun.data,p_intervals:ranges});if(saved.error||saved.data!==true)throw new Error('calendar_busy_unavailable');
  return ranges;
 }

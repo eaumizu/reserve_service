@@ -1,6 +1,6 @@
 import {beforeEach,expect,it,vi} from 'vitest';
-const {rpc,fetchCalendar,token}=vi.hoisted(()=>({rpc:vi.fn(),fetchCalendar:vi.fn(),token:vi.fn()}));
-vi.mock('../lib/supabase-server',()=>({supabaseServer:()=>({rpc})}));
+const {rpc,fetchCalendar,token,from}=vi.hoisted(()=>({rpc:vi.fn(),fetchCalendar:vi.fn(),token:vi.fn(),from:vi.fn()}));
+vi.mock('../lib/supabase-server',()=>({supabaseServer:()=>({rpc,from})}));
 vi.mock('../lib/google-calendar',async orig=>({...await orig<typeof import('../lib/google-calendar')>(),calendarFetch:fetchCalendar,googleCalendarToken:token,decryptCalendarSecret:()=> 'refresh',calendarPlatformReady:()=>true}));
 import {googleBusyRange,refreshCalendarBusy} from '../lib/google-calendar-busy';
 import {calendarEventId} from '../lib/google-calendar';
@@ -13,9 +13,40 @@ it('handles cancelled, free and all-day events with exclusive end dates',()=>{
 });
 it('excludes only system-owned event IDs and metadata, including the booking being moved',()=>{
  const own={id:calendarEventId({storeId:'store',reservationId:'booking'}),extendedProperties:{private:{storeId:'store',reservationId:'booking'}}};
- expect(googleBusyRange({...event,...own},'store')).toBeNull();expect(googleBusyRange({...event,...own,id:'manually-added'},'store')).not.toBeNull();expect(googleBusyRange({...event,...own},'other')).not.toBeNull();
+ const bookings=new Map([['booking',{start_at:event.start.dateTime,end_at:event.end.dateTime}]]);
+ expect(googleBusyRange({...event,...own},'store','Asia/Tokyo',bookings)).toBeNull();
+ expect(googleBusyRange({...event,...own},'store')).not.toBeNull();
+ expect(googleBusyRange({...event,...own,id:'manually-added'},'store','Asia/Tokyo',bookings)).not.toBeNull();expect(googleBusyRange({...event,...own},'other','Asia/Tokyo',bookings)).not.toBeNull();
 });
 it('does not treat malformed busy events as free time',()=>{expect(()=>googleBusyRange({start:{dateTime:'bad'},end:event.end},'store')).toThrow();});
+it('keeps a system event busy when Google moves it away from its booking time',()=>{
+ const reservationId='22222222-2222-2222-2222-222222222222';
+ const moved={...event,id:calendarEventId({storeId:'store',reservationId}),extendedProperties:{private:{storeId:'store',reservationId}},start:{dateTime:'2030-01-01T12:00:00+09:00'},end:{dateTime:'2030-01-01T13:00:00+09:00'}};
+ const bookings=new Map([[reservationId,{start_at:event.start.dateTime,end_at:event.end.dateTime}]]);
+ expect(googleBusyRange(moved,'store','Asia/Tokyo',bookings)).toEqual({start:'2030-01-01T03:00:00.000Z',end:'2030-01-01T04:00:00.000Z'});
+ expect(googleBusyRange({...moved,start:event.start},'store','Asia/Tokyo',bookings)).not.toBeNull();
+});
+it('checks the current confirmed booking before excluding an exported event, and keeps moved or stale events occupied',async()=>{
+ const reservationId='22222222-2222-2222-2222-222222222222';
+ const own={...event,id:calendarEventId({storeId:'store',reservationId}),extendedProperties:{private:{storeId:'store',reservationId}}};
+ let rows:{id:string;start_at:string;end_at:string}[]=[{id:reservationId,start_at:event.start.dateTime,end_at:event.end.dateTime}];
+ const q={select:vi.fn(),eq:vi.fn(),in:vi.fn()};q.select.mockReturnValue(q);q.eq.mockReturnValue(q);q.in.mockImplementation(async()=>({data:rows,error:null}));from.mockReturnValue(q);
+ const read=(item:unknown)=>fetchCalendar.mockResolvedValue(new Response(JSON.stringify({items:[item]})));
+ read(own);expect(await refreshCalendarBusy('store','2030-01-01')).toEqual([]);
+ expect(q.eq).toHaveBeenCalledWith('store_id','store');expect(q.eq).toHaveBeenCalledWith('status','confirmed');expect(q.in).toHaveBeenCalledWith('id',[reservationId]);
+ read({...own,start:{dateTime:'2030-01-01T12:00:00+09:00'},end:{dateTime:'2030-01-01T13:00:00+09:00'}});
+ expect(await refreshCalendarBusy('store','2030-01-01')).toEqual([{start:'2030-01-01T03:00:00.000Z',end:'2030-01-01T04:00:00.000Z'}]);
+ rows=[];read(own);expect(await refreshCalendarBusy('store','2030-01-01')).toHaveLength(1);
+ q.in.mockResolvedValue({data:null,error:{message:'lookup failed'}});
+ await expect(refreshCalendarBusy('store','2030-01-01')).rejects.toThrow();
+});
+it('reads newly added and removed Google appointments on each refresh',async()=>{
+ fetchCalendar.mockResolvedValueOnce(new Response(JSON.stringify({items:[]}))).mockResolvedValueOnce(new Response(JSON.stringify({items:[event]}))).mockResolvedValueOnce(new Response(JSON.stringify({items:[]})));
+ expect(await refreshCalendarBusy('store','2030-01-01')).toHaveLength(0);
+ expect(await refreshCalendarBusy('store','2030-01-01')).toHaveLength(1);
+ expect(await refreshCalendarBusy('store','2030-01-01')).toHaveLength(0);
+ expect(token).toHaveBeenCalledTimes(3);
+});
 it('expands recurring events, follows every page and shares simultaneous staff reads',async()=>{
  fetchCalendar.mockResolvedValueOnce(new Response(JSON.stringify({items:[event],nextPageToken:'next'}))).mockResolvedValueOnce(new Response(JSON.stringify({items:[{...event,start:{dateTime:'2030-01-01T12:00:00+09:00'},end:{dateTime:'2030-01-01T13:00:00+09:00'}}]})));
  const [a,b]=await Promise.all([refreshCalendarBusy('store','2030-01-01'),refreshCalendarBusy('store','2030-01-01')]);expect(a).toEqual(b);expect(a).toHaveLength(2);expect(token).toHaveBeenCalledTimes(1);expect(fetchCalendar).toHaveBeenCalledTimes(2);expect(fetchCalendar.mock.calls[0][1]).toContain('singleEvents=true');expect(fetchCalendar.mock.calls[1][1]).toContain('pageToken=next');
@@ -29,4 +60,8 @@ it('rejects a result superseded by a new refresh or connection',async()=>{
 });
 it('does not contact Google when disconnected or the feature is disabled',async()=>{
  for(const data of [null,{busyEnabled:false}]){rpc.mockResolvedValue({data,error:null});expect(await refreshCalendarBusy('store','2030-01-01')).toEqual([]);}expect(fetchCalendar).not.toHaveBeenCalled();
+});
+it('does not treat a connected calendar with an unknown busy setting as free',async()=>{
+ rpc.mockResolvedValue({data:{calendarId:'calendar',revision:'rev'},error:null});
+ await expect(refreshCalendarBusy('store','2030-01-01')).rejects.toThrow('calendar_busy_unavailable');expect(fetchCalendar).not.toHaveBeenCalled();
 });
