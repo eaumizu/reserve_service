@@ -100,9 +100,9 @@ WordPressのページ、プライバシーポリシー、利用規約、メー�
 
 ## 8. 前日通知を切り替え
 
-現在のVercel cronは`0 0 * * *`（UTC 00:00 = 日本時間09:00）。予約画面の30秒更新とは別の処理。
+前日通知の実行時刻は`0 0 * * *`（UTC 00:00 = 日本時間09:00）。予約画面の30秒更新とは別の処理。`vercel.json`の`crons`は空にしてあり、この変更をVercelの本番へデプロイすると旧定期実行を解除する。Cloudflare側は引き続きcronなし・`REMINDERS_ENABLED: "false"`で、旧定期実行の停止を確認してから別の変更で有効化する。
 
-1. Vercel側の前日通知cronを停止する。Workersへの移行中に`vercel.json`を削除するだけで済ませず、現在デプロイに反映された停止を確認する。
+1. 空の`crons`を含む変更がVercelの本番デプロイに反映されたことを確認する。Vercelの対象プロジェクト → Settings → Cron Jobsで`/api/cron/reminders`の定期実行がなくなっていることを確認する。リポジトリ上の変更やプレビューデプロイの成功だけを停止の確認としない。
 2. `reserve-service-reminders`へ本番アプリと同じ`CRON_SECRET`をSecret登録する。
 3. `cloudflare/wrangler.reminders.jsonc`の`REMINDERS_ENABLED`を`"true"`、`triggers.crons`を`["0 0 * * *"]`へ変更する。この有効化は別の変更として記録する。
 4. `pnpm cf:reminders:deploy`。service binding先`reserve-service`を確認する。public HTTPトリガーはない。
