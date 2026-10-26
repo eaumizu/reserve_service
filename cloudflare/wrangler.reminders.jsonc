@@ -6,9 +6,9 @@
   "workers_dev": false,
   "preview_urls": false,
   "services": [{ "binding": "BOOKING_APP", "service": "reserve-service" }],
-  "vars": { "REMINDERS_ENABLED": "false" },
-  // Activate only after disabling the Vercel cron: ["0 0 * * *"] (09:00 JST).
-  "triggers": { "crons": [] },
+  "vars": { "REMINDERS_ENABLED": "true" },
+  // Vercel's production cron was removed before this activation (09:00 JST).
+  "triggers": { "crons": ["0 0 * * *"] },
   // Do not set a Paid-only CPU allowance while trialling the Free plan.
   "observability": { "enabled": false }
 }

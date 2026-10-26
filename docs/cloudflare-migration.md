@@ -6,7 +6,7 @@ Next.js 15をOpenNext経由でWorkersに載せるためのコード・設定で�
 
 - 検証用Worker名: `reserve-service-staging`（wrangler.jsoncの既定）
 - 本番Worker名: `reserve-service`（`--env production`）
-- 前日通知Worker名: `reserve-service-reminders`。初期状態はcronなし・送信無効。
+- 前日通知Worker名: `reserve-service-reminders`。Vercel側の旧定期実行を停止した後、毎日日本時間09:00のcronを有効化。
 - Next.js 15.5.28 / OpenNext 1.20.13 / Wrangler 4.152.0を固定。Node.js 22で検証する。
 - API/空き枠は既存のno-store設定を維持。R2/D1/KVへのデータ移行や追加課金リソースは使わない。
 - `.open-next`、`.wrangler`、`.dev.vars*`、秘密を含む`.env*`はGit管理外。
@@ -100,12 +100,12 @@ WordPressのページ、プライバシーポリシー、利用規約、メー�
 
 ## 8. 前日通知を切り替え
 
-前日通知の実行時刻は`0 0 * * *`（UTC 00:00 = 日本時間09:00）。予約画面の30秒更新とは別の処理。`vercel.json`の`crons`は空にしてあり、この変更をVercelの本番へデプロイすると旧定期実行を解除する。Cloudflare側は引き続きcronなし・`REMINDERS_ENABLED: "false"`で、旧定期実行の停止を確認してから別の変更で有効化する。
+前日通知の実行時刻は`0 0 * * *`（UTC 00:00 = 日本時間09:00）。予約画面の30秒更新とは別の処理。`vercel.json`の`crons`は空にしてあり、Vercelの本番デプロイと管理画面で旧ジョブの削除を確認した後、Cloudflare側を`REMINDERS_ENABLED: "true"`・毎日09:00のcronへ切り替えた。初回の自動実行と実際の配信結果はデプロイ後に確認する。
 
 1. 空の`crons`を含む変更がVercelの本番デプロイに反映されたことを確認する。Vercelの対象プロジェクト → Settings → Cron Jobsで`/api/cron/reminders`の定期実行がなくなっていることを確認する。リポジトリ上の変更やプレビューデプロイの成功だけを停止の確認としない。
 2. `reserve-service-reminders`へ本番アプリと同じ`CRON_SECRET`をSecret登録する。
-3. `cloudflare/wrangler.reminders.jsonc`の`REMINDERS_ENABLED`を`"true"`、`triggers.crons`を`["0 0 * * *"]`へ変更する。この有効化は別の変更として記録する。
-4. `pnpm cf:reminders:deploy`。service binding先`reserve-service`を確認する。public HTTPトリガーはない。
+3. `cloudflare/wrangler.reminders.jsonc`は`REMINDERS_ENABLED: "true"`、`triggers.crons: ["0 0 * * *"]`になっている。別環境へ導入する際も、旧スケジューラーを停止してからこの設定をデプロイする。停止する場合は`"false"`と空の`crons`へ戻し、通知用Workerを再デプロイする。
+4. `pnpm cf:reminders:deploy`。service binding先`reserve-service`を確認する。public HTTPトリガーはない。Git連携の通知用Workerは、ビルド`pnpm exec wrangler deploy --dry-run --config cloudflare/wrangler.reminders.jsonc`、デプロイ`pnpm cf:reminders:deploy`、ルート`/`、プレビュービルド無効を使う。予約用Workerの再デプロイだけでは通知用の設定は反映されない。
 5. Cron反映には最大15分程度かかる場合がある。次の09:00実行と管理画面の通知履歴を確認する。送信テストはテスト先・対象予約を決めて行う。
 
 定期実行の失敗はScheduledイベント結果を確認する。通知本文や宛先、認証情報をログに出さない。ログは既定無効で、調査時に期間を区切って有効化する。送信失敗の再試行は既存の管理画面から行える。
