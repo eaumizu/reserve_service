@@ -1,0 +1,7 @@
+{
+  "name": "local-crypto-test-only",
+  "main": "cloudflare-crypto.worker.ts",
+  "compatibility_date": "2026-10-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "LINE_SETTINGS_ENCRYPTION_KEY": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+}

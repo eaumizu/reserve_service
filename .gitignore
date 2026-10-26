@@ -4,3 +4,11 @@ node_modules/
 coverage/
 *.tsbuildinfo
 .DS_Store
+
+# Cloudflare build output and local secrets
+.open-next/
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
+!cloudflare/.env.example
