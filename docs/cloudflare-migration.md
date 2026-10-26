@@ -13,7 +13,9 @@ Next.js 15をOpenNext経由でWorkersに載せるためのコード・設定で�
 
 ## 1. アカウントと退避
 
-CloudflareのWorkers Paid（月額最低5ドル、従量超過あり）を利用する。ドメイン向けPro契約とは別。既存Vercelの環境変数一覧と値、デプロイ先、Google/LINE設定URL、WordPressの埋め込みURLを安全な場所に控える。予約DBはバックアップし、同じ本番Supabaseを継続利用する。秘密の値をGit、チャット、手順書に書かない。
+まずCloudflareのWorkers Freeで検証する。アップグレードは初回デプロイの前提ではない。CPU上限の拡張を設定せず、契約プランの既定値を使う。制限が実際の利用に影響する場合は、同じアカウントのWorkers Paid（月額最低5ドル、従量超過あり）へ切り替える。ドメイン向けPro契約とは別。
+
+既存Vercelの環境変数一覧と値、デプロイ先、Google/LINE設定URL、WordPressの埋め込みURLを安全な場所に控える。予約DBはバックアップし、同じ本番Supabaseを継続利用する。秘密の値をGit、チャット、手順書に書かない。
 
 Cloudflareへのアクセス権がない実行環境からはアップロードできない。ダッシュボードのGitHub連携または、利用者のPCで認証済みのWranglerを使う。APIトークンをチャットに貼らない。
 
@@ -69,6 +71,16 @@ CIはダミー設定だけで、既存の単体/API/SQL/ブラウザテストに
 - Google OAuthのcallback URIは`https://予約アプリのホスト/api/admin/calendar/callback`。審査中の本番クライアントの設定変更は影響を確認してから行い、必要に応じて検証用クライアントを使う。
 - Googleの検証用HTMLが同じパスで200応答する。
 
+### 無料枠の確認と有料への切り替え
+
+Freeではアカウント全体で1日10万リクエスト、HTTP/cronとも1実行あたりCPU 10ms、外部へのサブリクエスト50回が上限。ネットワーク応答待ちはCPU時間に含まれないが、暗号処理や画面生成は含まれる。ローカル実行やCIの成功だけでは、この上限内で動く保証にはならない。
+
+Cloudflare上へ検証用デプロイした後、WorkersのMetricsで実際のリクエスト数・CPU時間・エラーを確認する。予約・日時変更・Google busy・通知を一通り試し、複数件の前日通知も確認する。現在の通知APIは1実行で最大40件を扱うため、件数によって外部通信50回の上限に先に達する場合がある。通知を有効にする前に、想定件数で確認し、必要ならPaidへ切り替える。
+
+CPU制限によるError 1102、1日のリクエスト上限によるError 1027、サブリクエスト超過が出る場合は切り替えを判断する。Freeのまま上限を超えても、自動でPaidへ移行する設定にはしない。
+
+Paidへ変更する際は、同じCloudflareアカウントのWorkersプランをアップグレードする。Workerの作り直し、URL変更、APIキー再発行、Supabaseの移設は不要。今回の設定はプランの既定上限を使うため、アップグレードのためのコード変更も不要。切り替え後に同じ動作確認を行い、使用量と請求見込みを確認する。
+
 ## 6. 本番Workerを準備
 
 URLを決める。`workers.dev`で先に検証し、必要なら所有ドメインのサブドメインをWorkerに追加する。`vercel.app`自体をCloudflareへ引き継ぐことはできない。独自ドメインを使うためにDNSを変更する場合、WordPress/XserverのAレコード、メールのMX/SPF/DKIM/DMARCなどを維持する。
@@ -101,4 +113,4 @@ WordPressのページ、プライバシーポリシー、利用規約、メー�
 
 本番で予約・変更・取消、Google busy、メール、LINE、翌日通知を確認し、古い予約リンクの対応とWorkersのリクエスト/CPU使用量・請求見込みを確認してからVercelを停止する。WorkersのCPU上限は1実行あたりであり、月額請求の固定上限ではない。
 
-公式資料: [OpenNext](https://developers.cloudflare.com/workers/framework-guides/web-apps/opennext/) / [Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) / [Cron](https://developers.cloudflare.com/workers/configuration/cron-triggers/)
+公式資料: [OpenNext](https://developers.cloudflare.com/workers/framework-guides/web-apps/opennext/) / [Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) / [Cron](https://developers.cloudflare.com/workers/configuration/cron-triggers/) / [Free/Paidの制限](https://developers.cloudflare.com/workers/platform/limits/)
