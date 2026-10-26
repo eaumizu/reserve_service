@@ -1,6 +1,8 @@
 import {beforeEach,expect,it,vi} from "vitest";
 const {rpc}=vi.hoisted(()=>({rpc:vi.fn()}));vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc})}));vi.mock("../lib/line-booking-notification",()=>({bookingSiteOrigin:()=>"https://booking.example.com"}));
 import {newCalendarAuthorization,calendarEventId,syncCalendarJob,dispatchCalendarJobs,type CalendarJob} from "../lib/google-calendar";
+import {googleCalendarToken} from "../lib/google-calendar";
+import {CalendarAuthError} from "../lib/calendar-diagnostics";
 const job:CalendarJob={storeId:"trusted",reservationId:"reservation",version:"version",leaseId:"lease",connectionRevision:"revision",status:"confirmed",customerName:"お客様",serviceName:"整体",staffName:"",startAt:"2030-01-01T01:00:00Z",endAt:"2030-01-01T02:00:00Z"};
 beforeEach(()=>{vi.resetAllMocks();vi.stubEnv("GOOGLE_CALENDAR_CLIENT_ID","client");vi.stubEnv("GOOGLE_CALENDAR_CLIENT_SECRET","secret");vi.stubEnv("LINE_SETTINGS_ENCRYPTION_KEY","a".repeat(64));vi.stubGlobal("fetch",vi.fn());});
 it("uses random state and PKCE with a fixed callback",()=>{const a=newCalendarAuthorization(),b=newCalendarAuthorization(),url=new URL(a.url);expect(a.state).not.toBe(b.state);expect(a.verifier).not.toBe(b.verifier);expect(url.searchParams.get("code_challenge_method")).toBe("S256");expect(url.searchParams.get("redirect_uri")).toBe("https://booking.example.com/api/admin/calendar/callback");expect(a.url).not.toContain("client_secret");});
@@ -10,3 +12,11 @@ it("deletes cancelled appointments without sending invitations",async()=>{vi.moc
 it("keeps absent cancelled events absent",async()=>{vi.mocked(fetch).mockResolvedValue(new Response('{}',{status:404}));await syncCalendarJob('token','cal',{...job,status:'cancelled'});expect(fetch).toHaveBeenCalledTimes(1);});
 it("ignores unconfigured platform and disconnected stores",async()=>{vi.stubEnv('GOOGLE_CALENDAR_CLIENT_ID','');await dispatchCalendarJobs('trusted');expect(rpc).not.toHaveBeenCalled();vi.stubEnv('GOOGLE_CALENDAR_CLIENT_ID','client');rpc.mockResolvedValue({data:null,error:null});expect((await dispatchCalendarJobs('trusted')).pending).toBe(false);expect(fetch).not.toHaveBeenCalled();});
 it("rejects jobs for another store",async()=>{rpc.mockImplementation(async name=>({data:name==='store_calendar_credentials'?{revision:'revision',refreshCipher:'cipher',calendarId:'cal'}:{...job,storeId:'other'},error:null}));expect((await dispatchCalendarJobs('trusted')).pending).toBe(true);expect(fetch).not.toHaveBeenCalled();});
+it('retains only whitelisted OAuth failure categories, never provider descriptions',async()=>{
+ for(const reason of ['invalid_client','invalid_grant','secret-provider-body']){
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({error:reason,error_description:'private-token-and-secret'},{status:400}));
+  const failure=await googleCalendarToken({refresh_token:'private-refresh'}).catch(e=>e);
+  expect(failure).toBeInstanceOf(CalendarAuthError);expect(failure.reason).toBe(reason==='secret-provider-body'?'other':reason);
+  expect(JSON.stringify(failure)).not.toMatch(/private|secret-provider/);
+ }
+});

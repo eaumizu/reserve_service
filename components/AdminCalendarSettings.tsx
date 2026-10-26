@@ -20,6 +20,8 @@ export function AdminCalendarSettings({auth,onBusy}:{auth:SupabaseClient;onBusy:
   <p>確認対象：{data.connection.calendarName}。このカレンダーの「予定あり」の時間を確認します。</p>
   <label>Google予定の確認日<input type="date" value={checkDate} disabled={busy} onChange={e=>{setCheckDate(e.target.value);setCheck(undefined);}}/></label>
   <button disabled={busy||!checkDate||!data.busyEnabled||!data.platformReady} onClick={()=>void run("check-busy")}>Googleの受付停止を確認</button>
+  {busy&&<p role="status">Googleの予定を確認しています…</p>}
+  {error&&<p role="alert" className="error">{error}</p>}
   {check&&<div><p>{check.date} の受付停止：{check.intervals.length}件</p>
    {check.intervals.length?<ul>{check.intervals.slice(0,50).map((r,i)=><li key={i}>{new Date(r.start).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"})} ～ {new Date(r.end).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"})}</li>)}</ul>:<p>対象の予定はありません。Google側の登録先カレンダーと「予定あり／空き時間」を確認してください。</p>}
    {check.intervals.length>50&&<p>先頭50件を表示しています。</p>}

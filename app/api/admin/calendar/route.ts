@@ -3,10 +3,12 @@ import {authorizeStaff} from "../../../../lib/admin-auth";
 import {supabaseServer} from "../../../../lib/supabase-server";
 import {refreshCalendarBusy} from "../../../../lib/google-calendar-busy";
 import {isBookingDate} from "../../../../lib/reservations/date";
+import {calendarBusyDiagnostic} from "../../../../lib/calendar-diagnostics";
 import {CALENDAR_STATE_COOKIE,calendarPlatformReady,calendarCallbackUrl,validCalendarId,newCalendarAuthorization,hashCalendarState,encryptCalendarSecret,dispatchCalendarJobs} from "../../../../lib/google-calendar";
 export const maxDuration=60;
 const respond=(v:unknown,status=200)=>NextResponse.json(v,{status,headers:{"Cache-Control":"private, no-store"}});
 async function handle(req:NextRequest,write:boolean){
+ let checkingBusy=false;
  try{
   const actor=await authorizeStaff(req.headers.get("authorization"));if(!actor)return respond({error:"ログインしてください。"},401);if(actor.role!=="admin")return respond({error:"カレンダー接続は管理者のみ操作できます。"},403);
   const db=supabaseServer();let delivery,busyCheck;
@@ -22,6 +24,7 @@ async function handle(req:NextRequest,write:boolean){
     if(body.enabled&&!calendarPlatformReady())return respond({error:"Google連携の準備が未完了です。"},409);
     const r=await db.rpc("set_store_calendar_busy",{p_store_id:actor.storeId,p_enabled:body.enabled});if(r.error)throw r.error;
    }else if(body?.action==="check-busy"){
+    checkingBusy=true;
     if(typeof body.date!=="string"||!isBookingDate(body.date))return respond({error:"確認する日付を選択してください。"},400);
     const c=await db.rpc("store_calendar_credentials",{p_store_id:actor.storeId});if(c.error)throw c.error;
     if(!c.data?.busyEnabled)return respond({error:"Googleカレンダーを接続し、「Googleの予定で予約枠を閉じる」を有効にしてください。"},409);
@@ -39,7 +42,7 @@ async function handle(req:NextRequest,write:boolean){
   const credentials=await db.rpc("store_calendar_credentials",{p_store_id:actor.storeId});if(credentials.error)throw credentials.error;
   let callbackUrl="";try{callbackUrl=calendarCallbackUrl();}catch{}
   return respond({...d.data,busyEnabled:credentials.data?.busyEnabled===true,platformReady:calendarPlatformReady(),callbackUrl,delivery,busyCheck});
- }catch{return respond({error:"Google連携を確認できません。接続先とアクセス権限を確認し、再接続または時間をおいてお試しください。"},503);}
+ }catch(error){return respond(checkingBusy?calendarBusyDiagnostic(error):{error:"Google連携を確認できません。接続先とアクセス権限を確認し、再接続または時間をおいてお試しください。"},503);}
 }
 export async function GET(req:NextRequest){return handle(req,false);}
 export async function POST(req:NextRequest){return handle(req,true);}

@@ -1,11 +1,12 @@
 import {beforeEach,expect,it,vi} from 'vitest';
-const {rpc,fetchCalendar,token,from}=vi.hoisted(()=>({rpc:vi.fn(),fetchCalendar:vi.fn(),token:vi.fn(),from:vi.fn()}));
+const {rpc,fetchCalendar,token,from,decrypt}=vi.hoisted(()=>({rpc:vi.fn(),fetchCalendar:vi.fn(),token:vi.fn(),from:vi.fn(),decrypt:vi.fn()}));
 vi.mock('../lib/supabase-server',()=>({supabaseServer:()=>({rpc,from})}));
-vi.mock('../lib/google-calendar',async orig=>({...await orig<typeof import('../lib/google-calendar')>(),calendarFetch:fetchCalendar,googleCalendarToken:token,decryptCalendarSecret:()=> 'refresh',calendarPlatformReady:()=>true}));
+vi.mock('../lib/google-calendar',async orig=>({...await orig<typeof import('../lib/google-calendar')>(),calendarFetch:fetchCalendar,googleCalendarToken:token,decryptCalendarSecret:decrypt,calendarPlatformReady:()=>true}));
+import {CalendarBusyError,CalendarAuthError} from '../lib/calendar-diagnostics';
 import {googleBusyRange,refreshCalendarBusy} from '../lib/google-calendar-busy';
 import {calendarEventId} from '../lib/google-calendar';
 const event={start:{dateTime:'2030-01-01T10:00:00+09:00'},end:{dateTime:'2030-01-01T11:00:00+09:00'}};
-beforeEach(()=>{vi.resetAllMocks();token.mockResolvedValue({access_token:'access'});rpc.mockImplementation(async n=>({data:n==='store_calendar_credentials'?{busyEnabled:true,revision:'rev',calendarId:'calendar',refreshCipher:'cipher'}:n==='begin_store_calendar_busy'?'ticket':true,error:null}));fetchCalendar.mockResolvedValue(new Response(JSON.stringify({items:[event],timeZone:'Asia/Tokyo'})));});
+beforeEach(()=>{vi.resetAllMocks();decrypt.mockReturnValue('refresh');token.mockResolvedValue({access_token:'access'});rpc.mockImplementation(async n=>({data:n==='store_calendar_credentials'?{busyEnabled:true,revision:'rev',calendarId:'calendar',refreshCipher:'cipher'}:n==='begin_store_calendar_busy'?'ticket':true,error:null}));fetchCalendar.mockResolvedValue(new Response(JSON.stringify({items:[event],timeZone:'Asia/Tokyo'})));});
 it('handles cancelled, free and all-day events with exclusive end dates',()=>{
  expect(googleBusyRange({...event,status:'cancelled'},'store')).toBeNull();expect(googleBusyRange({...event,transparency:'transparent'},'store')).toBeNull();
  expect(googleBusyRange({start:{date:'2030-01-01'},end:{date:'2030-01-02'}},'store')).toEqual({start:'2029-12-31T15:00:00.000Z',end:'2030-01-01T15:00:00.000Z'});
@@ -64,4 +65,27 @@ it('does not contact Google when disconnected or the feature is disabled',async(
 it('does not treat a connected calendar with an unknown busy setting as free',async()=>{
  rpc.mockResolvedValue({data:{calendarId:'calendar',revision:'rev'},error:null});
  await expect(refreshCalendarBusy('store','2030-01-01')).rejects.toThrow('calendar_busy_unavailable');expect(fetchCalendar).not.toHaveBeenCalled();
+});
+it('identifies decryption failure before contacting Google and does not clear busy times',async()=>{
+ decrypt.mockImplementation(()=>{throw new Error('private cipher and token');});
+ const failure=await refreshCalendarBusy('store','2030-01-01').catch(e=>e);
+ expect(failure).toBeInstanceOf(CalendarBusyError);expect(failure.stage).toBe('decrypt');
+ expect(token).not.toHaveBeenCalled();expect(fetchCalendar).not.toHaveBeenCalled();
+ expect(rpc.mock.calls.some(c=>c[0]==='save_store_calendar_busy')).toBe(false);
+});
+it('distinguishes rejected Google client credentials from a revoked refresh grant',async()=>{
+ for(const reason of ['invalid_client','invalid_grant'] as const){
+  token.mockRejectedValue(new CalendarAuthError(reason));
+  const failure=await refreshCalendarBusy('store','2030-01-01').catch(e=>e);
+  expect(failure.stage).toBe('google_auth');expect(failure.reason).toBe(reason);
+ }
+ expect(fetchCalendar).not.toHaveBeenCalled();expect(rpc.mock.calls.some(c=>c[0]==='save_store_calendar_busy')).toBe(false);
+});
+it('identifies Google read failures and platform subrequest exhaustion',async()=>{
+ fetchCalendar.mockRejectedValueOnce(new Error('Too many subrequests.'));
+ const limited=await refreshCalendarBusy('store','2030-01-01').catch(e=>e);
+ expect(limited.stage).toBe('google_events');expect(limited.reason).toBe('subrequests');
+ fetchCalendar.mockResolvedValueOnce(new Response('{}',{status:403}));
+ const denied=await refreshCalendarBusy('store','2030-01-01').catch(e=>e);expect(denied.stage).toBe('google_events');
+ expect(rpc.mock.calls.some(c=>c[0]==='save_store_calendar_busy')).toBe(false);
 });
