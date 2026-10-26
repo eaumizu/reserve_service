@@ -13,7 +13,7 @@ export async function runScheduledReminders(env: ReminderEnvironment) {
   // Service binding addresses the deployed app directly, without public DNS.
   const response = await env.BOOKING_APP.fetch(new Request("https://booking.internal/api/cron/reminders", {
     headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
-    redirect: "error",
+    redirect: "manual",
   }));
   if (!response.ok) throw new Error(`reminder_dispatch_http_${response.status}`);
   const result = await response.json() as { sent?: number; failed?: number };

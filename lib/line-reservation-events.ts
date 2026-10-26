@@ -1,3 +1,4 @@
+import {fetchWithoutRedirect} from "./fetch-without-redirect";
 import {supabaseServer} from "./supabase-server";
 import {decryptLineCredential} from "./line-settings-secret";
 type Payload={storeName:string;serviceName:string;staffName:string;oldStartAt:string;oldEndAt:string;startAt:string;endAt:string;oldStaffName:string;oldServiceName:string};
@@ -10,7 +11,7 @@ export function lineReservationEventMessage(job:LineReservationEvent){
  return `${p.storeName}\n${details}\n（日本時間）\n\n予約の確認は、保存済みの予約専用リンクから行えます。`;
 }
 export async function sendLineReservationEvent(job:LineReservationEvent,accessToken:string){
- const r=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json","X-Line-Retry-Key":job.id},body:JSON.stringify({to:job.userId,messages:[{type:"text",text:lineReservationEventMessage(job)}]}),redirect:"error",signal:AbortSignal.timeout(8000)});
+ const r=await fetchWithoutRedirect("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json","X-Line-Retry-Key":job.id},body:JSON.stringify({to:job.userId,messages:[{type:"text",text:lineReservationEventMessage(job)}]}),signal:AbortSignal.timeout(8000)});
  if(!r.ok&&!(r.status===409&&r.headers.get("x-line-accepted-request-id")))throw new Error("line_push_failed");
 }
 // Reservation writes are already committed. Sending must never turn a successful write into an API failure.

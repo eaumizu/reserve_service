@@ -10,6 +10,7 @@ Next.js 15をOpenNext経由でWorkersに載せるためのコード・設定で�
 - Next.js 15.5.28 / OpenNext 1.20.13 / Wrangler 4.152.0を固定。Node.js 22で検証する。
 - API/空き枠は既存のno-store設定を維持。R2/D1/KVへのデータ移行や追加課金リソースは使わない。
 - `.open-next`、`.wrangler`、`.dev.vars*`、秘密を含む`.env*`はGit管理外。
+- 外部APIへの認証付き通信は`fetchWithoutRedirect`を使う。Workersで未対応の`redirect: "error"`は使わず、`manual`で受けた3xxを明示的に拒否する。Google認証・予定取得、メール、LINEと前日通知が対象。Workers用CIではnative Requestの検証を含め、Googleの予定を反映した空き枠計算までテスト応答で確認する。
 
 ## 1. アカウントと退避
 

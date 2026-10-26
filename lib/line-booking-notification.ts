@@ -1,3 +1,4 @@
+import {fetchWithoutRedirect} from "./fetch-without-redirect";
 import {decryptLineCredential} from "./line-settings-secret";
 import {CUSTOMER_TOKEN,hashCustomerToken,type CustomerBooking} from "./customer-booking";
 export type LineBookingNotification={codeHash:string;storeId:string;userId:string;tokenHash:string;tokenCipher:string;retryKey:string;booking:CustomerBooking};
@@ -14,6 +15,6 @@ export async function sendLineBookingNotification(job:LineBookingNotification,ac
  const token=decryptLineCredential(job.storeId,job.tokenCipher);
  if(!CUSTOMER_TOKEN.test(token)||hashCustomerToken(token)!==job.tokenHash||job.booking.storeId!==job.storeId)throw new Error("invalid_booking_token");
  const url=`${bookingSiteOrigin()}/reservation#${token}`;
- const response=await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json","X-Line-Retry-Key":job.retryKey},body:JSON.stringify({to:job.userId,messages:[{type:"text",text:lineBookingMessage(job.booking,url)}]}),redirect:"error",signal:AbortSignal.timeout(8000)});
+ const response=await fetchWithoutRedirect("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Content-Type":"application/json","X-Line-Retry-Key":job.retryKey},body:JSON.stringify({to:job.userId,messages:[{type:"text",text:lineBookingMessage(job.booking,url)}]}),signal:AbortSignal.timeout(8000)});
  if(!response.ok&&!(response.status===409&&response.headers.get("x-line-accepted-request-id")))throw new Error("line_push_failed");
 }

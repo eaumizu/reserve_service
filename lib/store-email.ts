@@ -17,7 +17,7 @@ export function parseEmailSettings(body:Record<string,unknown>){
 }
 export async function resendDomain(path:string,method="GET",body?:unknown){
  if(!emailPlatformReady())throw new Error("platform");
- const r=await resendFetch(`https://api.resend.com/domains${path}`,{method,headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","User-Agent":"reserve-service/1.0"},...(body?{body:JSON.stringify(body)}:{}),redirect:"error"});
+ const r=await resendFetch(`https://api.resend.com/domains${path}`,{method,headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`,"Content-Type":"application/json","User-Agent":"reserve-service/1.0"},...(body?{body:JSON.stringify(body)}:{})});
  await requireResendResponse(r);return r.json();
 }
 export function domainSnapshot(value:Record<string,unknown>,settings:Pick<EmailSettings,"domain"|"domainId">){
