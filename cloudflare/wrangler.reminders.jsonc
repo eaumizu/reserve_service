@@ -9,6 +9,6 @@
   "vars": { "REMINDERS_ENABLED": "false" },
   // Activate only after disabling the Vercel cron: ["0 0 * * *"] (09:00 JST).
   "triggers": { "crons": [] },
-  "limits": { "cpu_ms": 30000 },
+  // Do not set a Paid-only CPU allowance while trialling the Free plan.
   "observability": { "enabled": false }
 }

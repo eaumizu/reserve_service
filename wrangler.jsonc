@@ -8,7 +8,7 @@
   "workers_dev": true,
   "preview_urls": false,
   "keep_vars": true,
-  "limits": { "cpu_ms": 30000 },
+  // Use the account plan's defaults: Free first, Paid later without moving the Worker.
   "observability": { "enabled": false },
   "env": {
     "production": {
