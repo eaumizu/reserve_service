@@ -5,6 +5,7 @@ vi.mock("../lib/google-calendar-busy",()=>({refreshCalendarBusy:refreshBusy}));
 vi.mock("../lib/admin-auth",()=>({authorizeStaff:auth}));vi.mock("../lib/supabase-server",()=>({supabaseServer:()=>({rpc,auth:{admin:{getUserById:getUser}}})}));vi.mock("../lib/line-booking-notification",()=>({bookingSiteOrigin:()=>"https://booking.example.com"}));
 import {encryptCalendarSecret} from "../lib/google-calendar";
 import {GET,POST} from "../app/api/admin/calendar/route";
+import {CalendarBusyError} from "../lib/calendar-diagnostics";
 import {GET as callback} from "../app/api/admin/calendar/callback/route";
 const req=(b?:unknown)=>new NextRequest('https://booking.example.com/api/admin/calendar',{method:b?'POST':'GET',...(b?{body:JSON.stringify(b)}:{})});
 beforeEach(()=>{vi.resetAllMocks();vi.stubEnv('GOOGLE_CALENDAR_CLIENT_ID','client');vi.stubEnv('GOOGLE_CALENDAR_CLIENT_SECRET','secret');vi.stubEnv('LINE_SETTINGS_ENCRYPTION_KEY','a'.repeat(64));auth.mockResolvedValue({role:'admin',storeId:'trusted',userId:'actor'});rpc.mockResolvedValue({data:{connection:null,pending:0,failed:0},error:null});vi.stubGlobal('fetch',vi.fn());});
@@ -35,4 +36,17 @@ it('rejects invalid check dates, disconnected settings, and failed Google reads'
  rpc.mockResolvedValue({data:{busyEnabled:true}});refreshBusy.mockRejectedValue(new Error('Google permission lost'));
  expect((await POST(req({action:'check-busy',date:'2030-01-01'}))).status).toBe(503);
  auth.mockResolvedValue({role:'staff'});refreshBusy.mockClear();expect((await POST(req({action:'check-busy',date:'2030-01-01'}))).status).toBe(403);expect(refreshBusy).not.toHaveBeenCalled();
+});
+it('provides actionable, secret-free diagnostics only after admin authorization',async()=>{
+ rpc.mockResolvedValue({data:{busyEnabled:true}});
+ for(const failure of [new CalendarBusyError('decrypt'),new CalendarBusyError('google_auth','invalid_client'),new CalendarBusyError('google_auth','invalid_grant')]){
+  refreshBusy.mockRejectedValueOnce(failure);
+  const r=await POST(req({action:'check-busy',date:'2030-01-01'}));expect(r.status).toBe(503);
+  const body=await r.json();expect(body.diagnosticCode).toMatch(/^calendar_/);expect(body.error).toBeTruthy();
+ }
+ refreshBusy.mockRejectedValueOnce(new Error('private refresh-token, calendar-id and secret'));
+ const body=await (await POST(req({action:'check-busy',date:'2030-01-01'}))).json();
+ expect(body.diagnosticCode).toBe('calendar_check_failed');expect(JSON.stringify(body)).not.toMatch(/private|refresh-token|calendar-id/);
+ auth.mockResolvedValue({role:'staff'});refreshBusy.mockClear();
+ const denied=await POST(req({action:'check-busy',date:'2030-01-01'}));expect(denied.status).toBe(403);expect(refreshBusy).not.toHaveBeenCalled();
 });
