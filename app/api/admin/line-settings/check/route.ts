@@ -1,3 +1,4 @@
+import {fetchWithoutRedirect} from "../../../../../lib/fetch-without-redirect";
 import {NextRequest,NextResponse} from "next/server";
 import {authorizeStaff} from "../../../../../lib/admin-auth";
 import {supabaseServer} from "../../../../../lib/supabase-server";
@@ -13,7 +14,7 @@ export async function POST(request:NextRequest){
     if(!result.data?.access_token_cipher)return respond({error:"チャネルアクセストークンを保存してから確認してください。"},400);
     let token:string;
     try{token=decryptLineCredential(user.storeId,result.data.access_token_cipher);}catch{return respond({error:"認証情報を読み取れません。暗号化キーの設定をご確認ください。"},503);}
-    const response=await fetch("https://api.line.me/v2/bot/info",{headers:{Authorization:`Bearer ${token}`},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(10000)});
+    const response=await fetchWithoutRedirect("https://api.line.me/v2/bot/info",{headers:{Authorization:`Bearer ${token}`},cache:"no-store",signal:AbortSignal.timeout(10000)});
     if(response.status===401||response.status===403)return respond({error:"LINEの認証に失敗しました。アクセストークンを確認し、保存し直してください。"},400);
     if(!response.ok)return respond({error:"LINEに接続できませんでした。時間を置いて再度お試しください。"},503);
     const data=await response.json();

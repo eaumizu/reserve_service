@@ -1,3 +1,4 @@
+import {fetchWithoutRedirect} from "./fetch-without-redirect";
 // Serialize requests within this worker. Other workers can still hit the account limit.
 let tail:Promise<void>=Promise.resolve();let nextAt=0;
 export class ResendRequestError extends Error {
@@ -18,7 +19,7 @@ export function resendFetch(url:string,init:RequestInit){
    // Only repeat reads or sends protected by the stable notification ID.
    const safe=(init.method??"GET")==="GET"||new Headers(init.headers).has("Idempotency-Key");
    let response:Response;
-   try{response=await fetch(url,{...init,signal});}
+   try{response=await fetchWithoutRedirect(url,{...init,signal});}
    catch(error){
     if(!safe||attempt>=2||init.signal?.aborted)throw error;
     await new Promise(r=>setTimeout(r,500*(attempt+1)));continue;

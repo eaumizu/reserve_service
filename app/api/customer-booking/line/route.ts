@@ -1,3 +1,4 @@
+import {fetchWithoutRedirect} from "../../../../lib/fetch-without-redirect";
 import {NextRequest,NextResponse} from "next/server";
 import {decryptLineCredential,encryptLineCredential} from "../../../../lib/line-settings-secret";
 import {lineMessageUrl} from "../../../../lib/line-message-url";
@@ -20,7 +21,7 @@ export async function POST(request:NextRequest){
   if(!available)return respond({error:"店舗のLINE連携は準備中です。"},409);
   if(linked.data)return respond({error:"この予約はすでにLINEと連携済みです。"},409);
   const accessToken=decryptLineCredential(booking.storeId,settings.data!.access_token_cipher);
-  const infoResponse=await fetch("https://api.line.me/v2/bot/info",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store",redirect:"error",signal:AbortSignal.timeout(8000)});
+  const infoResponse=await fetchWithoutRedirect("https://api.line.me/v2/bot/info",{headers:{Authorization:`Bearer ${accessToken}`},cache:"no-store",signal:AbortSignal.timeout(8000)});
   if(!infoResponse.ok)return respond({error:"店舗のLINEに接続できません。時間を置いてお試しください。"},503);
   const info=await infoResponse.json();
   const id=info.basicId;

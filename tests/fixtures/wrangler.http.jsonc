@@ -1,0 +1,13 @@
+{
+  "name": "local-http-test-only",
+  "main": "cloudflare-http.worker.ts",
+  "compatibility_date": "2026-10-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://example.supabase.co",
+    "SUPABASE_SERVICE_ROLE_KEY": "test-only-key",
+    "GOOGLE_CALENDAR_CLIENT_ID": "test-client",
+    "GOOGLE_CALENDAR_CLIENT_SECRET": "test-secret",
+    "LINE_SETTINGS_ENCRYPTION_KEY": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

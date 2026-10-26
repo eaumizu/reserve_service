@@ -19,7 +19,7 @@ describe("Cloudflare reminder trigger", () => {
       expect(new URL(request.url).pathname).toBe("/api/cron/reminders");
       expect(request.method).toBe("GET");
       expect(request.headers.get("Authorization")).toBe(`Bearer ${secret}`);
-      expect(request.redirect).toBe("error");
+      expect(request.redirect).toBe("manual");
       return Response.json({ sent: 2, failed: 0 });
     });
     await worker.scheduled({}, { BOOKING_APP: { fetch }, CRON_SECRET: secret, REMINDERS_ENABLED: "true" });
@@ -27,6 +27,7 @@ describe("Cloudflare reminder trigger", () => {
   });
   it.each([
     [new Response("denied", { status: 401 }), "http_401"],
+    [new Response(null, { status: 302, headers: { Location: "https://untrusted.example" } }), "http_302"],
     [Response.json({ sent: 1, failed: 1 }), "delivery_failed"],
     [Response.json({ ok: true }), "invalid_response"],
   ])("reports failed dispatches for operations", async (response, message) => {

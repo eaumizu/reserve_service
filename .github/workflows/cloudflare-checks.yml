@@ -52,3 +52,15 @@ jobs:
           done
           if [ "$ready" != true ]; then cat /tmp/cloudflare-crypto.log; exit 1; fi
           node tests/cloudflare-crypto-smoke.cjs
+      - name: Verify provider requests and Google busy availability in Workers
+        run: |
+          pnpm exec wrangler dev --config tests/fixtures/wrangler.http.jsonc --port 3016 > /tmp/cloudflare-http.log 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" || true' EXIT
+          ready=false
+          for attempt in $(seq 1 40); do
+            if curl --silent --fail http://127.0.0.1:3016 > /dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then cat /tmp/cloudflare-http.log; exit 1; fi
+          node tests/cloudflare-http-smoke.cjs
