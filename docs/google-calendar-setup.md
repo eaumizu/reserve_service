@@ -20,15 +20,15 @@ https://console.cloud.google.com/ を開き、上部のプロジェクト選択 
 Google Auth Platform →「クライアント」→「クライアントを作成」で「ウェブアプリケーション」を選びます。名前は例「予約管理Web」。
 「承認済みのリダイレクトURI」に次を登録します（末尾を変えずに入力します）。
 
-`https://reserve-service-beryl.vercel.app/api/admin/calendar/callback`
+`https://reserve-service.water7daily.workers.dev/api/admin/calendar/callback`
 
-別の公開ドメインを使う場合は、管理画面のGoogle連携の「接続の準備・使い方」に表示されるURLを登録してください。URLのホストはVercelの公開URL設定に一致させます。
+別の公開ドメインを使う場合は、管理画面のGoogle連携の「接続の準備・使い方」に表示されるURLを登録してください。実行時の`LINE_BOOKING_SITE_URL`に設定したオリジンと一致させます。`redirect_uri_mismatch`は、アプリが要求する戻り先とこの登録が一致しない場合のエラーです。
 
-## 6. Vercelへ登録する
-Vercel → reserve-service → Settings → Environment Variablesに、Googleが発行した値を登録します。
+## 6. Cloudflareの実行時設定へ登録する
+Cloudflare → Workers & Pages → `reserve-service` → Settings → **Runtime variables and secrets → Production**に、Googleが発行した値をSecretとして登録します。**Builds内のVariables and secretsではありません。**
 - `GOOGLE_CALENDAR_CLIENT_ID`：クライアントID
 - `GOOGLE_CALENDAR_CLIENT_SECRET`：クライアントシークレット
-Productionへ保存して再デプロイします。暗号化には既存の `LINE_SETTINGS_ENCRYPTION_KEY` を使い、変更しません。秘密の値はチャットへ貼り付けないでください。
+同じ実行時設定に`LINE_BOOKING_SITE_URL=https://reserve-service.water7daily.workers.dev`を設定し、保存・デプロイします。暗号化には既存の `LINE_SETTINGS_ENCRYPTION_KEY` を使い、変更しません。秘密の値はチャットへ貼り付けないでください。
 
 ## 7. 店舗管理画面から接続する
 店舗設定 → LINE・メール・前日通知の設定 → Googleカレンダー連携を開きます。予約専用カレンダーのIDを入力し、「Googleカレンダーを接続」を押します。Googleの画面でカレンダーを管理するアカウントを選び、必要な権限を許可します。

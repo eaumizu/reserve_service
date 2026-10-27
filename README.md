@@ -2,6 +2,16 @@
 
 Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始できる予約基盤です。予約データは PostgreSQL が唯一の正本であり、Web・電話・店頭・管理画面の予約はいずれも同じ原子的な DB 関数を通します。
 
+## 現在の公開先と運用手順
+
+- 予約ページ: https://reserve-service.water7daily.workers.dev/
+- 管理画面: https://reserve-service.water7daily.workers.dev/admin
+- WordPressの予約入口: https://jiyu.ai/reserve/
+- 予約用Worker: `reserve-service`、前日通知用Worker: `reserve-service-reminders`
+- 運用・移行・切り戻し: [Cloudflare移行手順](docs/cloudflare-migration.md)
+
+Cloudflareのビルド用設定と実行時設定は別です。サーバー用キーは**Runtime variables and secrets**へ登録します。前日通知の`CRON_SECRET`は、予約用・通知用の両方に同じ実行時Secretが必要です。機能ごとのSQL適用手順は導入時の履歴を含み、適用済みのマイグレーションやseedをホスティング移行だけのために再実行する必要はありません。
+
 ## 起動
 
 ### メール連絡先
@@ -75,7 +85,7 @@ where id = '管理者のユーザーUUID'::uuid;
 4. 更新版がデプロイされたURLの `/admin` を開き、登録したメールアドレスとパスワードでログインします。
 5. ログアウト後、予約一覧が消えることを確認します。未ログインで `/api/admin/reservations` にアクセスすると401を返します。
 
-Vercelが `main` をProductionブランチにしている場合、`work` ブランチへのpushはPreviewだけを更新します。本番URLを保護するにはこの変更を `main` に反映し、Productionデプロイの完了を確認してください。
+本番はCloudflare WorkersのGit連携で `main` をデプロイします。予約用は `pnpm cf:build` → `pnpm cf:deploy:production`、通知用は `pnpm cf:reminders:deploy` です。対象WorkerのDeploymentsで本番デプロイの完了を確認してください。
 
 ## 検証
 
@@ -86,7 +96,7 @@ Vercelが `main` をProductionブランチにしている場合、`work` ブラ�
 - Supabase Project URL / anon key / service-role key
 - 本番店舗名、メニュー、施術者、営業時間
 - 管理者のログイン方式と初期アカウント
-- GitHub リポジトリと Vercel プロジェクト（公開時）
+- GitHubリポジトリとCloudflare Workers（予約用・通知用）
 
 ## スタッフ用メモ
 

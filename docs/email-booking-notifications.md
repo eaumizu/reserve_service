@@ -2,7 +2,7 @@
 
 ## 設定
 1. Supabase SQL Editorで `supabase/migrations/0019_email_booking_notifications.sql` 全文を新しいクエリに貼り付け、Runを押します。0018まで適用済みであることが前提です。
-2. Vercel Productionの `RESEND_API_KEY`、`LINE_SETTINGS_ENCRYPTION_KEY`（既存LINE設定と共通の暗号鍵）、予約サイトの公開URLが設定済みであることを確認します。暗号鍵を変更すると既存の暗号化リンクは復号できません。
+2. 予約サイトのCloudflare WorkerのRuntime variables and secrets → Productionに `RESEND_API_KEY`、`LINE_SETTINGS_ENCRYPTION_KEY`（既存LINE設定と共通の暗号鍵）、`LINE_BOOKING_SITE_URL`（公開URLのオリジン）が設定済みであることを確認します。暗号鍵を変更すると既存の暗号化リンクは復号できません。
 3. 管理画面「前日連絡 → 店舗のメール通知設定」で店舗の送信元が認証済みなら、新しいドメイン登録は不要です。
 
 ## 確認

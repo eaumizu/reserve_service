@@ -3,25 +3,25 @@
 ## 利用開始
 
 1. Supabase SQL Editorの新しいクエリに `supabase/migrations/0017_booking_reminders.sql` 全文を貼り、Run。0016まで適用済みのDBが対象です。
-2. Vercelのプロジェクト → Settings → Environment Variables → Productionに `CRON_SECRET` を追加。パスワード管理アプリ等で生成した32文字以上のランダムな秘密文字列を使用します。Macのターミナルなら `openssl rand -hex 32` で生成できます。チャットやGitHubに貼らないでください。
+2. Cloudflareの `reserve-service` と `reserve-service-reminders` の両方で、Settings → **Runtime variables and secrets → Production**に、同じ32文字以上の `CRON_SECRET` をSecretとして登録します。**Builds内への登録だけでは自動実行時に利用できません。** 既存の値がある場合はそれを引き継ぎます。新規生成する場合はパスワード管理アプリや `openssl rand -hex 32` を使い、チャットやGitHubに貼らないでください。
 3. 再デプロイしてReadyを待ち、管理画面 →「前日連絡」→「前日通知を有効にする」。初期設定は停止です。店舗ごとに有効化します。
 4. LINE連携済みの翌日予約で「未送信の前日通知を送信・再送」を押して、届く日時・担当者を確認します。テストにも実際の通知が送られます。キャンセルや担当者変更後は古い未送信通知が無効になります。
-5. Vercel Settings → Cron Jobsで `/api/cron/reminders` を確認。UTC `0 0 * * *` は日本時間午前9時です。Hobbyは指定時刻から最大約1時間の幅があるため、9時ちょうどは保証しません。定期実行はProductionのみです。
+5. Cloudflareの通知用Worker → Settings → Trigger eventsでCronを確認します。UTC `0 0 * * *` は日本時間午前9時です。通知用Workerは `BOOKING_APP → reserve-service` のService bindingと `REMINDERS_ENABLED=true` を使います。別のスケジューラーから切り替える場合は、旧定期実行を停止してから有効化します。詳細は [Cloudflare移行手順](cloudflare-migration.md) を参照してください。
 
 ## 店舗ごとのメール（Resend）
 
 1. 0017を適用した後、SQL Editorの**新しいクエリ**で `supabase/migrations/0018_store_email_settings.sql` を実行します。
-2. 運営者が[Resend](https://resend.com/)にアカウントを作り、API Keysで**Full access（ドメイン管理・メール送信）**のキーを発行します。Vercel Productionの `RESEND_API_KEY` に登録して再デプロイしてください。キーは店舗に渡しません。
+2. 運営者が[Resend](https://resend.com/)にアカウントを作り、API Keysで**Full access（ドメイン管理・メール送信）**のキーを発行します。予約サイトのCloudflare Workerの実行時Secret `RESEND_API_KEY` に登録して再デプロイしてください。キーは店舗に渡しません。
 3. 管理画面 →「前日連絡」→「店舗のメール通知設定」。送信者名・送信元メールアドレス・返信先（任意）を入力し「送信元を保存」。例：送信者名「A整体院」、送信元 `booking@a-seitai.jp`、返信先は店舗が受信できるアドレス。
 4. 「ドメインを登録」を押すと、その店舗専用のドメインをResendに登録してDNSレコードを表示します。店舗のDNS管理画面に種類・名前・値・優先度・TTLを登録してください。既存の受信用MXを削除しないでください。DNS管理画面によって名前欄にドメイン部分を付けるか省略するかが異なります。
 5. 「認証を確認」を押します。DNSの反映後に「認証済み」となるまで確認してください。確認ボタンはメールを送りません。
 6. 「前日連絡を更新」でメール設定済みの状態を確認し、LINE未連携・メール登録ありの翌日予約で「未送信の前日通知を送信・再送」を押してテストします。実際にメールが送信されます。
 
-店舗がDNSを編集できる独自ドメインが必要です。Gmail等は送信元に使えませんが、返信先として使えます。共通の `REMINDER_EMAIL_FROM` は使用しなくなります。旧値がVercelに残っていても送信元には採用されません。店舗別の送信元設定が必須です。
+店舗がDNSを編集できる独自ドメインが必要です。Gmail等は送信元に使えませんが、返信先として使えます。共通の `REMINDER_EMAIL_FROM` は使用しなくなります。旧値が実行環境に残っていても送信元には採用されません。店舗別の送信元設定が必須です。
 
 Resend側でドメインを先に手動登録せず、この画面から登録してください。他店舗の既存ドメインを取り込む処理は行いません。登録失敗・通信切断で「登録処理中」のままなら、運営者がResend側の登録状況とDBを確認します。重複登録や別店舗のドメイン流用を防ぐため、確認せずに再登録する操作はありません。ドメイン変更で旧ドメインを自動削除することもありません。不要な旧ドメインの整理は運営者が確認して行います。
 
-送信先の優先順位はLINE → メール → 電話です。両方登録していても一方だけに通知します。認証前・配信サービス未設定なら、メール登録者も電話対象です。翌日の未送信・未連絡の電話対象は、認証後の一覧更新でメール対象に切り替わります。すでに連絡済み、送信試行済み、予約当日の対象は自動で切り替えません。予約時のメール入力・LINE連携は任意です。SMSは使用しません。
+送信先の優先順位はLINE → メール → 電話です。両方登録していても一方だけに通知します。認証前・配信サービス未設定なら、メール登録者も電話対象です。翌日の未送信・未連絡の電話対象は、認証後の一覧更新でメール対象に切り替わります。すでに連絡済み、送信試行済み、予約当日の対象は自動で切り替えません。現在の新規Web予約・手動予約はメール入力が必須で、LINE連携は任意です。SMSは使用しません。
 
 送信直前にもResendの認証状態と送信許可を確認します。照会失敗・認証失効は送信失敗として連絡確認を促します。送信元と返信先を通知ジョブに固定して再送の本文を変えません。送信元変更後の未試行メールは作り直し、試行済みメールは重複送信を避けて電話確認にします。送信処理が始まった通知は変更前の送信元で届く場合があります。
 
@@ -43,4 +43,4 @@ Resendの契約によるドメイン数・送信件数の制限が適用され�
 
 連絡先は店舗で認証した管理画面に限って表示し、通知ジョブのDBテーブルはRLSとサービス専用RPCで制限します。Cronは32文字以上の `CRON_SECRET` を検証し、個人情報や鍵をレスポンス・ログへ出しません。LINEの設定・認証情報は既存の店舗別暗号化設定を使用します。
 
-参照: [Vercel Cronの制限](https://vercel.com/docs/cron-jobs/usage-and-pricing)、[Resend API](https://resend.com/docs/api-reference/introduction)、[Resendの再送キー](https://resend.com/docs/dashboard/emails/idempotency-keys)。
+参照: [Cloudflare Cron Triggers](https://developers.cloudflare.com/workers/configuration/cron-triggers/)、[Resend API](https://resend.com/docs/api-reference/introduction)、[Resendの再送キー](https://resend.com/docs/dashboard/emails/idempotency-keys)。
