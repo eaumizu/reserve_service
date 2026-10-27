@@ -10,7 +10,7 @@
 
 ## 適用
 0010の後に0011_customer_booking_access.sql、0012_store_line_settings.sqlを順に適用する。
-LINE秘密情報を保存する場合、VercelにLINE_SETTINGS_ENCRYPTION_KEY（暗号学的乱数で生成した32バイト、64桁の16進数）をサーバー専用環境変数として登録する。NEXT_PUBLIC_は付けない。変更すると既存の暗号文を復号できなくなるため、キーは継続して管理する。
+LINE秘密情報を保存する場合、予約サイトの実行時SecretにLINE_SETTINGS_ENCRYPTION_KEY（暗号学的乱数で生成した32バイト、64桁の16進数）をサーバー専用環境変数として登録する。NEXT_PUBLIC_は付けない。変更すると既存の暗号文を復号できなくなるため、キーは継続して管理する。
 公式アカウント名・URLだけの登録には暗号化キーは不要。
 
 ## 取り扱い

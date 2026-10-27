@@ -20,7 +20,7 @@ export async function sendStoreBookingNotification(job:StoreBookingNotification)
 export function storeDeliveryFailure(error:unknown){
  if(error instanceof ResendRequestError){
   if(error.status===429)return "メール配信サービスの送信制限に達しました。少し待って再送してください。";
-  if(error.status===401||error.status===403)return "メール配信の権限を確認してください。VercelのRESEND_API_KEYとResendのドメイン・送信権限をご確認ください。";
+  if(error.status===401||error.status===403)return "メール配信の権限を確認してください。予約サイトの実行時環境変数RESEND_API_KEYとResendのドメイン・送信権限をご確認ください。";
   if(error.status===422||error.status===400)return "配信サービスがメールの内容・送信元・受信先を受け付けませんでした。ResendのLogsをご確認ください。";
   if(error.status===409)return "配信サービスで通知IDの競合が発生しました。ResendのLogsをご確認ください。";
   return "メール配信サービスでエラーが発生しました。少し待って再送してください。";
@@ -28,13 +28,13 @@ export function storeDeliveryFailure(error:unknown){
  const reason=error instanceof Error?error.message:"";
  if(reason==="unverified")return "送信元ドメインが認証済みになっていません。店舗メール設定で認証を確認してください。";
  if(reason==="sender_changed")return "通知作成時と送信元設定が異なります。送信元設定を確認してください。";
- if(reason==="invalid_booking_origin"||error instanceof TypeError&&reason.includes("Invalid URL"))return "管理画面URLを作成できません。VercelのLINE_BOOKING_SITE_URLに公開サイトのURLを設定してください。";
+ if(reason==="invalid_booking_origin"||error instanceof TypeError&&reason.includes("Invalid URL"))return "管理画面URLを作成できません。予約サイトの実行時環境変数LINE_BOOKING_SITE_URLに公開サイトのURLを設定してください。";
  if(reason==="invalid_recipient")return "店舗の通知受信先メールアドレスを確認してください。";
  if(reason==="database")return "メール設定を取得できません。データベースの設定をご確認ください。";
  return "メール送信が完了しませんでした。接続やタイムアウトの可能性があります。少し待って再送してください。";
 }
 export async function dispatchStoreBookingNotifications(storeId:string,reservationId:string|null=null,limit=2){
- if(!emailPlatformReady())return {pending:true,sent:0,failed:0,error:"VercelのRESEND_API_KEYが設定されていません。登録して再デプロイしてください。"};
+ if(!emailPlatformReady())return {pending:true,sent:0,failed:0,error:"予約サイトの実行時環境変数RESEND_API_KEYが設定されていません。登録して再デプロイしてください。"};
  let sent=0,failed=0;let error:string|undefined;
  try{
   const db=supabaseServer(),deadline=Date.now()+20000;

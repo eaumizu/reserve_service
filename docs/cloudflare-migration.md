@@ -92,7 +92,7 @@ URLを決める。`workers.dev`で先に検証し、必要なら所有ドメイ�
 
 ## 7. URLの切り替え
 
-切り替え前に古い予約確認メール/LINEの`https://reserve-service-beryl.vercel.app/reservation#...`リンクへの対処を決める。旧ドメインを廃止すると既送信リンクが使えなくなる。旧URLの保持・パス/クエリ/フラグメントを保つ転送、または対象者へのリンク再発行が必要。Vercel Hobbyで商用転送を無期限に維持できるとは扱わない。
+切り替え前に古い予約確認メール/LINEのリンクへの対処を決める。旧ドメインを廃止すると旧リンクは使えなくなる。引き続き使う場合は、旧URLの保持・パス/クエリ/フラグメントを保つ転送、またはリンク再発行を検討する。今回は旧リンクを維持・転送しない運用方針とした。予約データは同じSupabaseで継続利用しており、移行そのものを理由に予約を一括キャンセル・再作成する必要はない。Vercel Hobbyで商用転送を無期限に維持できるとは扱わない。
 
 準備が整ったら、Googleの承認済みリダイレクトURI/必要なドメイン設定、LINEのWebhook、WordPress `https://jiyu.ai/reserve/`のiframe srcと予約/管理ボタンを新URLへ切り替える。Googleの審査中の変更に追加確認が必要かも確認する。Googleの権限追加や接続解除を移行のためだけに行わない。Supabase AuthのSite URL/許可リダイレクトURLも、新ホストを使う導線がある場合は合わせる。
 
@@ -103,12 +103,16 @@ WordPressのページ、プライバシーポリシー、利用規約、メー�
 前日通知の実行時刻は`0 0 * * *`（UTC 00:00 = 日本時間09:00）。予約画面の30秒更新とは別の処理。`vercel.json`の`crons`は空にしてあり、Vercelの本番デプロイと管理画面で旧ジョブの削除を確認した後、Cloudflare側を`REMINDERS_ENABLED: "true"`・毎日09:00のcronへ切り替えた。初回の自動実行と実際の配信結果はデプロイ後に確認する。
 
 1. 空の`crons`を含む変更がVercelの本番デプロイに反映されたことを確認する。Vercelの対象プロジェクト → Settings → Cron Jobsで`/api/cron/reminders`の定期実行がなくなっていることを確認する。リポジトリ上の変更やプレビューデプロイの成功だけを停止の確認としない。
-2. `reserve-service-reminders`へ本番アプリと同じ`CRON_SECRET`をSecret登録する。
+2. **両方のWorker**のSettings → **Runtime variables and secrets → Production**へ、同じ`CRON_SECRET`をSecret登録する。通知用は`reserve-service-reminders`、予約サイト用は`reserve-service`。Builds内の同名設定はビルド専用であり、実行時には渡らない。通知用Workerの実行時一覧に`REMINDERS_ENABLED=true`と`CRON_SECRET`の2つ、Bindingsに`BOOKING_APP → reserve-service`があることを確認する。
 3. `cloudflare/wrangler.reminders.jsonc`は`REMINDERS_ENABLED: "true"`、`triggers.crons: ["0 0 * * *"]`になっている。別環境へ導入する際も、旧スケジューラーを停止してからこの設定をデプロイする。停止する場合は`"false"`と空の`crons`へ戻し、通知用Workerを再デプロイする。
 4. `pnpm cf:reminders:deploy`。service binding先`reserve-service`を確認する。public HTTPトリガーはない。Git連携の通知用Workerは、ビルド`pnpm exec wrangler deploy --dry-run --config cloudflare/wrangler.reminders.jsonc`、デプロイ`pnpm cf:reminders:deploy`、ルート`/`、プレビュービルド無効を使う。予約用Workerの再デプロイだけでは通知用の設定は反映されない。
 5. Cron反映には最大15分程度かかる場合がある。次の09:00実行と管理画面の通知履歴を確認する。送信テストはテスト先・対象予約を決めて行う。
 
 定期実行の失敗はScheduledイベント結果を確認する。通知本文や宛先、認証情報をログに出さない。ログは既定無効で、調査時に期間を区切って有効化する。送信失敗の再試行は既存の管理画面から行える。
+
+不達調査では、予約ごとの「通知方法」と「連絡状況」を確認する。`通知待ち`は送信未完了、`自動通知済み（配信サービス受付済み）`は配信サービスが受け付けた状態を示す。同じ一覧の別予約の送信履歴と混同しない。CloudflareのSettingsに実行履歴へのリンクがない画面では、通知用WorkerのMetricsを過去24時間にして実行回数とエラーを見る。実行時`CRON_SECRET`がない場合は、予約サイトへの呼び出し前にエラーになる。Builds側へ登録しただけのSecretは実行時設定へ登録し直す。
+
+手動送信の成功と日次Cronの成功は別に確認する。午前9時の自動送信は、その実行日に対する翌日の確定予約が対象。自動実行を待つ日を変える場合は、テスト予約の日付も合わせ、変更確認画面で確定する。失敗後に実行時設定を修正しても、過ぎたCronが自動で再実行されるわけではない。
 
 ## 9. 切り戻し・移行完了
 

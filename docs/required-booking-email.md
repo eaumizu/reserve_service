@@ -1,6 +1,6 @@
 # 予約はメール必須・電話番号任意
 
-0026まで適用済みの環境で、`0027_required_booking_email.sql` をSupabase SQL Editorで実行します。最新の公開先 https://reserve-service-beryl.vercel.app/ を使用してください。
+0026まで適用済みの環境で、`0027_required_booking_email.sql` をSupabase SQL Editorで実行します。最新の公開先 https://reserve-service.water7daily.workers.dev/ を使用してください。既に適用済みの場合、ホスティングの移行だけを理由にSQLを再実行する必要はありません。
 
 お客様用Web予約と管理画面の手動予約で、メールアドレスを必須、電話番号を任意にします。入力された電話番号は書式と長さを確認し、全角数字を正規化します。空欄は空文字として保存し、架空の番号で補いません。確認画面と店舗通知は未入力の電話番号を適切に表示し、店舗通知にはメールアドレスも記載します。予約・変更・キャンセル・前日通知は従来の配信設定と再送機能を使います。
 

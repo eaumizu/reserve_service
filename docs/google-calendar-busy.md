@@ -2,7 +2,7 @@
 
 ## 初回設定
 1. 0025まで適用済みのSupabase SQL Editorで `0026_google_calendar_busy.sql` の全文を実行します。
-2. 最新の管理画面 https://reserve-service-beryl.vercel.app/admin を開きます。
+2. 最新の管理画面 https://reserve-service.water7daily.workers.dev/admin を開きます。
 3. 店舗設定 → LINE・メール・前日通知の設定 → Googleカレンダー連携で「Googleの予定で予約枠を閉じる」を有効にします。
 4. 接続済みの「店舗予約」カレンダーに「予定あり」の予定を作り、お客様用予約画面で該当日を選びます。全担当者の該当枠が出ないことを確認します。
 5. Googleの予定を移動・削除し、予約画面が自動更新されて枠が戻ることを確認します。

@@ -1,6 +1,6 @@
 # LINE連携完了時の予約通知
 
-0014_line_booking_notifications.sqlをSupabaseの新しいクエリで実行してください。LINE DevelopersでWebhookの利用とWebhookの再送を有効にします。URLと認証情報の変更は不要です。通知のリンクはVercelのVERCEL_PROJECT_PRODUCTION_URLを使います。別ホストの場合はLINE_BOOKING_SITE_URLにHTTPSの本番オリジンを設定します（パスなし）。
+0014_line_booking_notifications.sqlをSupabaseの新しいクエリで実行してください。LINE DevelopersでWebhookの利用とWebhookの再送を有効にします。URLと認証情報の変更は不要です。通知のリンクには、予約サイトの実行時環境変数LINE_BOOKING_SITE_URLに設定したHTTPSの本番オリジンを使います（パスなし）。CloudflareではRuntime variables and secretsへ登録します。現在の公開先は https://reserve-service.water7daily.workers.dev です。
 
 新しく予約とのLINE連携コードを送信した時に、予約日時（日本時間）、メニュー、担当者、予約確認・変更・キャンセル用リンクを送ります。既存の専用リンクを使い続けるため、保存済みリンクは無効になりません。LINE連携前の予約に勝手に通知したり、以前連携した予約に一括送信したりしません。
 

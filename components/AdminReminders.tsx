@@ -41,7 +41,7 @@ export function AdminReminders({auth,onBusy}:{auth:SupabaseClient;onBusy:(value:
   <button disabled={busy} onClick={()=>void run()}>前日連絡を更新</button>
   {!data?<p>前日連絡を読み込んでいます…</p>:<>
    <p>店舗の前日通知：<strong>{data.enabled?"有効":"停止中"}</strong></p>
-   {!data.cronReady&&<p>自動実行の認証設定が未完了です。VercelにCRON_SECRETを設定して再デプロイしてください。</p>}
+   {!data.cronReady&&<p>自動実行の認証設定が未完了です。予約サイトの実行時環境変数にCRON_SECRETを設定して再デプロイしてください。Cloudflareの通知用Workerにも同じ値を実行時Secretとして登録します。</p>}
    {!data.emailReady&&<p>メールの自動送信は未設定です。LINE未連携の方は電話連絡の対象になります。下の店舗メール設定で送信元を登録・認証してください。</p>}
    {data.canManage&&<div className="grid"><button disabled={busy} onClick={()=>{if(window.confirm(data.enabled?"この店舗の前日通知を停止しますか？":"前日通知を有効にしますか？設定済みのLINE・メールからお客様へ通知します。"))void run({action:"enable",enabled:!data.enabled});}}>{data.enabled?"前日通知を停止":"前日通知を有効にする"}</button>
    <button disabled={busy||!data.enabled} onClick={()=>{if(window.confirm("明日の予約の未送信通知を送信しますか？"))void run({action:"send"});}}>{busy?"処理中…":"未送信の前日通知を送信・再送"}</button></div>}
