@@ -10,6 +10,7 @@ import { AdminStoreSettings } from "./AdminStoreSettings";
 import { AdminAvailabilityBlocks } from "./AdminAvailabilityBlocks";
 import { CustomerLinkIssuer } from "./CustomerLinkIssuer";
 import { StaffNoteEditor } from "./StaffNoteEditor";
+import { AdminOperationGuide } from "./AdminOperationGuide";
 import { canRecordOutcome, type ReservationOutcome } from "../lib/reservations/outcome";
 import type { AdminReservation as Reservation } from "../lib/reservations/types";
 
@@ -209,7 +210,9 @@ export function AdminReservations() {
       <label>パスワード<input type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></label>
       <button className="primary" disabled={busy} type="submit">{busy ? "確認中…" : "ログイン"}</button>
     </form> : <>
-      <CalendarConnectionNotice/><nav className="grid" aria-label="予約画面の切り替え">
+      <CalendarConnectionNotice/>
+      <AdminOperationGuide canManage={canManageSettings}/>
+      <nav className="grid" aria-label="予約画面の切り替え">
         <button type="button" className={view === "list" && !showSettings && !showBlocks && !showReminders && !showCustomers ? "selected" : ""} disabled={busy} onClick={() => switchView("list")}>予約一覧</button>
         <button type="button" className={view === "search" && !showSettings && !showBlocks && !showReminders && !showCustomers ? "selected" : ""} disabled={busy} onClick={() => switchView("search")}>予約検索</button>
         <button type="button" className={view === "history" && !showSettings && !showBlocks && !showReminders && !showCustomers ? "selected" : ""} disabled={busy} onClick={() => switchView("history")}>予約履歴</button>
