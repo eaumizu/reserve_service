@@ -116,7 +116,11 @@ WordPressのページ、プライバシーポリシー、利用規約、メー�
 
 ## 9. 切り戻し・移行完了
 
-問題時は入口/Google/LINEのURLを控えたVercel設定へ戻す。Cloudflareのcronを停止してからVercelのcronを再開する。両方を同時に動かさない。DBは同じなので旧デプロイへDBを巻き戻さない。
+VercelへのGit自動デプロイは、`vercel.json`の`git.deploymentEnabled: false`で停止する。`crons: []`も維持する。Cloudflare WorkersのGit連携には影響しない。この設定を含むmainと、そこから作成するブランチを使用する。停止設定を取り込んでいない古いブランチをpushすると、そのブランチの設定でVercelが動く可能性があるため、不要なVercelのGit連携も解除する。
+
+この設定はGit経由の新規自動デプロイを止めるものであり、既存デプロイやプロジェクトを削除・公開停止する設定ではない。手動・CLI・API経由のデプロイも別に扱う。Vercelの対象チーム・プロジェクトを確認して削除または停止し、GitHubの過去のReadyコメントだけで現在の残存状態を判断しない。アクセスできないチームのプロジェクトは、削除済みとも稼働中とも断定しない。
+
+意図的にVercelへ切り戻す場合はプロジェクトと必要な設定を復元し、自動デプロイを使うなら`git.deploymentEnabled`を明示的に戻したうえで、入口/Google/LINEのURLをVercel設定へ変更する。Cloudflareのcronを停止してからVercelのcronを再開する。両方を同時に動かさない。DBは同じなので旧デプロイへDBを巻き戻さない。
 
 本番で予約・変更・取消、Google busy、メール、LINE、翌日通知を確認し、古い予約リンクの対応とWorkersのリクエスト/CPU使用量・請求見込みを確認してからVercelを停止する。WorkersのCPU上限は1実行あたりであり、月額請求の固定上限ではない。
 
