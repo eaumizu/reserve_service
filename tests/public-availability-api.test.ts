@@ -27,7 +27,7 @@ describe("public availability respects managed blocks", () => {
     const response = await GET(request());
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ slots: [{ staffId: "staff", staffName: "担当", startAt: "2030-01-01T03:00:00.000Z" }] });
-    expect(adminAvailableStarts).toHaveBeenCalledExactlyOnceWith("trusted-store", "service", "staff", "2030-01-01");
+    expect(adminAvailableStarts).toHaveBeenCalledExactlyOnceWith("trusted-store", "service", "staff", "2030-01-01", undefined, expect.objectContaining({ from }));
     expect(queries[0].eq).toHaveBeenCalledWith("store_id", "trusted-store");
     expect(queries[0].eq).toHaveBeenCalledWith("online_bookable", true);
     expect(queries[0].eq).toHaveBeenCalledWith("active", true);
@@ -37,6 +37,14 @@ describe("public availability respects managed blocks", () => {
   it("rejects impossible dates before querying", async () => {
     expect((await GET(request("2030-02-30"))).status).toBe(400);
     expect(from).not.toHaveBeenCalled();
+  });
+  it("drops starts that pass the cutoff while external availability reads are pending", async () => {
+    adminAvailableStarts.mockImplementationOnce(async () => {
+      vi.spyOn(Date, "now").mockReturnValue(Date.parse("2030-01-01T02:00:01Z"));
+      return ["2030-01-01T03:00:00.000Z"];
+    });
+    const response = await GET(request());
+    expect(await response.json()).toEqual({ slots: [] });
   });
   it("does not expose slots when settings or conflict data cannot be read", async () => {
     queryError = true;

@@ -4,6 +4,7 @@ import { adminAvailableStarts } from "../../lib/reservations/admin-availability"
 import { encryptCalendarSecret } from "../../lib/google-calendar";
 import { fetchWithoutRedirect } from "../../lib/fetch-without-redirect";
 import { resendFetch } from "../../lib/resend-request";
+import { googleBusyRange } from "../../lib/google-calendar-busy";
 const storeId = "11111111-1111-1111-1111-111111111111";
 const serviceId = "44444444-4444-4444-4444-444444444444";
 const staffId = "22222222-2222-2222-2222-222222222222";
@@ -37,7 +38,8 @@ const worker = {
       const line = await fetchWithoutRedirect("https://api.line.me/v2/bot/info", { headers: { Authorization: "Bearer test-only" } });
       let redirectRejected = false;
       try { await fetchWithoutRedirect("https://redirect.test/token", { headers: { Authorization: "Bearer test-only" } }); } catch { redirectRejected = true; }
-      return Response.json({ slots, mailOK: mail.ok, lineOK: line.ok, redirectRejected, requests });
+      const allDayRanges = ["2030-01-01", "2030-07-01"].map(day => googleBusyRange({ start: { date: day }, end: { date: day.slice(0, -2) + "02" } }, storeId, "America/Los_Angeles"));
+      return Response.json({ slots, mailOK: mail.ok, lineOK: line.ok, redirectRejected, requests, allDayRanges });
     } finally { globalThis.fetch = originalFetch; }
   },
 };

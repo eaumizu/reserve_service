@@ -6,8 +6,7 @@ import { addMinutes, findAvailableStarts } from "./availability";
 export { isBookingDate } from "./date";
 
 /** Japan-time slots for one authenticated store/staff, including offline services. */
-export async function adminAvailableStarts(storeId: string, serviceId: string, staffId: string, date: string, excludeReservationId?: string) {
-  const db = supabaseServer();
+export async function adminAvailableStarts(storeId: string, serviceId: string, staffId: string, date: string, excludeReservationId?: string, db = supabaseServer()) {
   const dayStart = new Date(`${date}T00:00:00+09:00`);
   const dayEnd = new Date(dayStart.getTime() + 86400000);
   let serviceQuery = db.from("services").select("duration_minutes,buffer_before,buffer_after")
@@ -40,7 +39,7 @@ export async function adminAvailableStarts(storeId: string, serviceId: string, s
       .lt("start_at", dayEnd.toISOString()).gt("end_at", windowStart.toISOString()),
   ]);
   if (reservationsResult.error || blocksResult.error) throw new Error("Availability conflicts failed");
-  const googleBusy = await refreshCalendarBusy(storeId,date);
+  const googleBusy = await refreshCalendarBusy(storeId,date,db);
   const occupied = [
     ...googleBusy.map(row=>({start:new Date(row.start),end:new Date(row.end)})),
     ...(reservationsResult.data ?? []).map(row => {

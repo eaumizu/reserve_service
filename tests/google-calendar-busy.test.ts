@@ -12,6 +12,13 @@ it('handles cancelled, free and all-day events with exclusive end dates',()=>{
  expect(googleBusyRange({start:{date:'2030-01-01'},end:{date:'2030-01-02'}},'store')).toEqual({start:'2029-12-31T15:00:00.000Z',end:'2030-01-01T15:00:00.000Z'});
  expect(googleBusyRange({start:{date:'2030-03-10'},end:{date:'2030-03-11'}},'store','America/Los_Angeles')).toEqual({start:'2030-03-10T08:00:00.000Z',end:'2030-03-11T07:00:00.000Z'});
 });
+it('reuses time zone rules without reusing event dates, including both DST transitions',()=>{
+ const allDay=(start:string,end:string)=>({start:{date:start},end:{date:end}});
+ expect(googleBusyRange(allDay('2030-01-01','2030-01-02'),'store','America/Los_Angeles')).toEqual({start:'2030-01-01T08:00:00.000Z',end:'2030-01-02T08:00:00.000Z'});
+ expect(googleBusyRange(allDay('2030-07-01','2030-07-02'),'store','America/Los_Angeles')).toEqual({start:'2030-07-01T07:00:00.000Z',end:'2030-07-02T07:00:00.000Z'});
+ expect(googleBusyRange(allDay('2030-11-03','2030-11-04'),'other','America/Los_Angeles')).toEqual({start:'2030-11-03T07:00:00.000Z',end:'2030-11-04T08:00:00.000Z'});
+ expect(()=>googleBusyRange(allDay('2030-01-01','2030-01-02'),'store','invalid/timezone')).toThrow();
+});
 it('excludes only system-owned event IDs and metadata, including the booking being moved',()=>{
  const own={id:calendarEventId({storeId:'store',reservationId:'booking'}),extendedProperties:{private:{storeId:'store',reservationId:'booking'}}};
  const bookings=new Map([['booking',{start_at:event.start.dateTime,end_at:event.end.dateTime}]]);
