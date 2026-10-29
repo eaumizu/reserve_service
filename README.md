@@ -10,18 +10,20 @@ Next.js App Router と Supabase/PostgreSQL で作る、単店舗から開始で�
 - 予約用Worker: `reserve-service`、前日通知用Worker: `reserve-service-reminders`
 - 運用・移行・切り戻し: [Cloudflare移行手順](docs/cloudflare-migration.md)
 
+管理画面では、ログイン後に「日々の運用ガイド」を開くと、営業前の確認、電話・店頭予約、通知が届かない場合の対応、施術結果の記録を確認できます。予約ページとお客様用の予約確認ページには、別タブで開くプライバシーポリシー・利用規約へのリンクがあります。
+
 Cloudflareのビルド用設定と実行時設定は別です。サーバー用キーは**Runtime variables and secrets**へ登録します。前日通知の`CRON_SECRET`は、予約用・通知用の両方に同じ実行時Secretが必要です。機能ごとのSQL適用手順は導入時の履歴を含み、適用済みのマイグレーションやseedをホスティング移行だけのために再実行する必要はありません。
 
 ## 起動
 
 ### メール連絡先
 
-`supabase/migrations/0010_reservation_email.sql` を0009の後に適用する。Web予約と手動予約に任意のメールアドレスを追加し、予約ごとに保存する。予約詳細の「メールを作成」は端末のメールアプリを開く。自動メール・SMS・LINE通知は未設定であり、送信サービスの選定と設定が別途必要。既存の予約にメールアドレスは補完しない。
+現在の新規Web予約・手動予約はメールアドレス必須、電話番号任意です。予約ごとにメールアドレスを保存し、設定済みのメール・LINE通知を利用します。予約詳細の「メールを作成」は端末のメールアプリを開きます。SMSは使用しません。過去のメール未登録予約に架空のメールアドレスを補完しません。
 
-メール付きの予約は新しいDB関数で予約作成と連絡先保存を一つのトランザクションで行う。SQL適用前もメールなしの予約と一覧表示は継続するが、メール付きの予約は保存準備中として失敗する（メールを捨てて予約だけ作成することはしない）。
+予約作成と連絡先保存は同じDBトランザクションで行います。メール通知は [予約メール通知](docs/email-booking-notifications.md)、必須入力の仕様は [予約はメール必須・電話番号任意](docs/required-booking-email.md) を参照してください。
 
 1. `.env.example` を `.env.local` にコピーし、Supabase Project URL、anon key、**server 専用** service-role key を設定する。
-2. Supabase SQL Editor または CLI で `supabase/migrations/0001_initial.sql`、`supabase/migrations/0002_validate_reservation_schedule.sql`、`supabase/migrations/0003_grant_service_role_table_access.sql`、`supabase/migrations/0004_reschedule_reservation_atomic.sql`、`supabase/migrations/0005_store_settings_atomic.sql`、`supabase/migrations/0006_manage_availability_blocks.sql`、`supabase/migrations/0007_fifteen_minute_grid.sql`、続いて `supabase/seed.sql` を順に実行する。
+2. **新規DBに限り**、`supabase/migrations/`のSQLを番号順に適用し、開発用データが必要な場合に`supabase/seed.sql`を実行する。導入済みの本番DBでは適用済みSQLやseedを再実行しない。
 3. `npm install`、`npm run dev` を実行して `http://localhost:3000` を開く。
 
 `/` はお客様用の予約フロー、`/admin` はメールアドレス・パスワードでログインするスタッフ向け予約一覧です。予約データはHTMLへ埋め込まず、認証済みユーザーの `app_metadata.store_id` と `role: staff | admin` をサーバーで検証した後に、その店舗の予約だけを取得します。ログイン直後は施術中・今後の確定予約を全スタッフについて開始時刻順に表示します。「今日」「日付指定」「全期間」とスタッフ別の条件を組み合わせ、開始時刻の早い順で確認できます。停止済みスタッフの予約も確認できます。施術完了・無断キャンセル・キャンセル済み予約は予約履歴で表示します。1ページ100件で前後のページへ進めます。条件変更時は先頭ページへ戻り、登録・変更・キャンセル後は選択中の条件で再取得します。日付は予約開始日の日本時間0時から翌日0時未満で判定します。この一覧改善には追加SQLは不要です。ログイン情報はメモリ内だけに保持するため、ページ再読み込み時は再ログインします。
