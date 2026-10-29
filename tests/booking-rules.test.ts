@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { acceptsWebBooking, bookingDateBounds, validBookingRules } from "../lib/booking-rules";
+import { acceptsWebBooking, bookingDateBounds, validBookingRules, webBookingWindow } from "../lib/booking-rules";
 import { parseSettingsChange } from "../lib/store-settings";
 const rules = { advance_days: 30, cutoff_minutes: 60 };
 const now = Date.parse("2030-01-01T10:00:00+09:00");
@@ -19,6 +19,17 @@ describe("booking reception rules", () => {
     expect(acceptsWebBooking("2030-01-01T12:00:00+09:00", { ...rules, advance_days: 0 }, now)).toBe(true);
     expect(acceptsWebBooking("2030-01-02T12:00:00+09:00", { ...rules, advance_days: 0 }, now)).toBe(false);
     expect(acceptsWebBooking("invalid", rules, now)).toBe(false);
+  });
+  it("keeps one reception window within a response, and rolls it forward for the next request", () => {
+    const todayOnly = { advance_days: 0, cutoff_minutes: 0 };
+    const beforeMidnight = Date.parse("2030-01-01T23:59:00+09:00");
+    const first = webBookingWindow(todayOnly, beforeMidnight);
+    expect(first.accepts("2030-01-01T23:59:01+09:00")).toBe(true);
+    expect(first.accepts("2030-01-02T00:00:00+09:00")).toBe(false);
+    const next = webBookingWindow(todayOnly, beforeMidnight + 60000);
+    expect(next.accepts("2030-01-01T23:59:01+09:00")).toBe(false);
+    expect(next.accepts("2030-01-02T00:00:01+09:00")).toBe(true);
+    expect(first.accepts("invalid")).toBe(false);
   });
   it.each([{ advance_days: -1, cutoff_minutes: 60 }, { advance_days: 366, cutoff_minutes: 60 }, { advance_days: 30, cutoff_minutes: 10 }, { advance_days: 30.5, cutoff_minutes: 60 }, { advance_days: 30, cutoff_minutes: 1455 }])("rejects invalid settings %j", value => {
     expect(validBookingRules(value)).toBe(false);

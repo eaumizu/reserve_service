@@ -5,6 +5,10 @@ const assert = require('node:assert/strict');
   const result = await response.json();
   assert.deepEqual(result.slots, ['2030-01-02T00:00:00.000Z', '2030-01-02T02:00:00.000Z'], 'Google busy 10:00-11:00 must close overlapping starts');
   assert.equal(result.mailOK, true); assert.equal(result.lineOK, true); assert.equal(result.redirectRejected, true);
+  assert.deepEqual(result.allDayRanges, [
+    { start: '2030-01-01T08:00:00.000Z', end: '2030-01-02T08:00:00.000Z' },
+    { start: '2030-07-01T07:00:00.000Z', end: '2030-07-02T07:00:00.000Z' },
+  ], 'reused timezone formatters must follow DST in the Workers runtime');
   for (const host of ['oauth2.googleapis.com', 'www.googleapis.com', 'api.resend.com', 'api.line.me']) {
     const requests = result.requests.filter(request => request.host === host);
     assert.equal(requests.length, 1, host);

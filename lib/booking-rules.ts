@@ -13,9 +13,16 @@ export function bookingDateBounds(rules: BookingRules, now = Date.now()) {
   return { minDate: japanDay, maxDate: lastDay };
 }
 export function acceptsWebBooking(startAt: string, rules: BookingRules, now = Date.now()) {
-  const start = Date.parse(startAt);
-  if (!Number.isFinite(start) || start <= now || start < now + rules.cutoff_minutes * 60000) return false;
-  const day = new Date(start + 9 * 3600000).toISOString().slice(0, 10);
+  return webBookingWindow(rules, now).accepts(startAt);
+}
+/** One clock and reception window per availability response, not per slot. */
+export function webBookingWindow(rules: BookingRules, now = Date.now()) {
   const bounds = bookingDateBounds(rules, now);
-  return day >= bounds.minDate && day <= bounds.maxDate;
+  const minStart = Date.parse(`${bounds.minDate}T00:00:00+09:00`);
+  const end = Date.parse(`${bounds.maxDate}T00:00:00+09:00`) + 86400000;
+  const cutoff = now + rules.cutoff_minutes * 60000;
+  return { ...bounds, accepts: (startAt: string) => {
+    const start = Date.parse(startAt);
+    return Number.isFinite(start) && start > now && start >= cutoff && start >= minStart && start < end;
+  } };
 }

@@ -9,9 +9,17 @@ function ownedReservationId(event:Event,storeId:string){
  const own=event.extendedProperties?.private;
  return own?.storeId===storeId&&own.reservationId&&event.id===calendarEventId({storeId,reservationId:own.reservationId})?own.reservationId:null;
 }
+// Only immutable formatters are reused; Google events/credentials are never cached.
+// Bound the cache because event time zones come from an external calendar.
+const midnightFormatters=new Map<string,Intl.DateTimeFormat>();
 function calendarMidnight(day:string,timeZone:string){
  const target=Date.parse(`${day}T00:00:00Z`);let value=target;
- const fmt=new Intl.DateTimeFormat('en-US',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+ let fmt=midnightFormatters.get(timeZone);
+ if(!fmt){
+  fmt=new Intl.DateTimeFormat('en-US',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+  if(midnightFormatters.size>=16)midnightFormatters.delete(midnightFormatters.keys().next().value!);
+  midnightFormatters.set(timeZone,fmt);
+ }
  for(let i=0;i<4;i++){
   const p=Object.fromEntries(fmt.formatToParts(value).map(x=>[x.type,x.value]));
   const local=Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);
@@ -31,15 +39,15 @@ export function googleBusyRange(event:Event,storeId:string,timeZone="Asia/Tokyo"
  return {start:start.toISOString(),end:end.toISOString()};
 }
 const inFlight=new Map<string,Promise<CalendarBusyRange[]>>();
-export function refreshCalendarBusy(storeId:string,day:string):Promise<CalendarBusyRange[]>{
+export function refreshCalendarBusy(storeId:string,day:string,db?:ReturnType<typeof supabaseServer>):Promise<CalendarBusyRange[]>{
  if(!isBookingDate(day))return Promise.reject(new Error('invalid_calendar_date'));
  const key=`${storeId}:${day}`;const prior=inFlight.get(key);if(prior)return prior;
- const pending=readBusy(storeId,day).finally(()=>{if(inFlight.get(key)===pending)inFlight.delete(key);});inFlight.set(key,pending);return pending;
+ const pending=readBusy(storeId,day,db).finally(()=>{if(inFlight.get(key)===pending)inFlight.delete(key);});inFlight.set(key,pending);return pending;
 }
-async function readBusy(storeId:string,day:string){
+async function readBusy(storeId:string,day:string,client?:ReturnType<typeof supabaseServer>){
  let stage:CalendarBusyStage='settings';
  try{
- const db=supabaseServer(),cfg=await db.rpc('store_calendar_credentials',{p_store_id:storeId});if(cfg.error)throw new Error('calendar_busy_unavailable');
+ const db=client??supabaseServer(),cfg=await db.rpc('store_calendar_credentials',{p_store_id:storeId});if(cfg.error)throw new Error('calendar_busy_unavailable');
  const c=cfg.data as {busyEnabled?:boolean;revision:string;calendarId:string;refreshCipher:string}|null;
  if(!c||c.busyEnabled===false)return [];
  stage='configuration';
