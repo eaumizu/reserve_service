@@ -1,7 +1,7 @@
 export const maxDuration = 60;
 import { NextRequest, NextResponse } from "next/server";
 import { isBookingDate } from "../../../lib/reservations/date";
-import { dateAvailableStarts } from "../../../lib/reservations/date-availability";
+import { dateAvailability } from "../../../lib/reservations/date-availability";
 import { readBookingRules } from "../../../lib/booking-rules-server";
 import { bookingDateBounds, webBookingWindow } from "../../../lib/booking-rules";
 import { supabaseServer } from "../../../lib/supabase-server";
@@ -14,10 +14,10 @@ export async function GET(request: NextRequest) {
     // Store scope comes only from deployment configuration, never the request.
     const storeId = process.env.NEXT_PUBLIC_DEFAULT_STORE_ID!, db = supabaseServer();
     const rules = await readBookingRules(storeId, db), bounds = bookingDateBounds(rules);
-    if (date < bounds.minDate || date > bounds.maxDate) return NextResponse.json({ slots: [] }, { headers });
-    const slots = await dateAvailableStarts(storeId, date, db);
+    if (date < bounds.minDate || date > bounds.maxDate) return NextResponse.json({ slots: [], times: [] }, { headers });
+    const result = await dateAvailability(storeId, date, db);
     const window = webBookingWindow(rules);
-    return NextResponse.json({ slots: slots.filter(s => window.accepts(s.startAt)) }, { headers });
+    return NextResponse.json({ slots: result.slots.filter(s => window.accepts(s.startAt)), times: result.times }, { headers });
   } catch {
     return NextResponse.json({ error: "空き枠を取得できません。時間をおいて再度お試しください。" }, { status: 503, headers });
   }
