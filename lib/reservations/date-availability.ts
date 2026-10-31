@@ -6,7 +6,7 @@ import { TIME_STEP_MS } from "./time-grid";
 export type DateSlot = { serviceId: string; staffId: string; staffName: string; startAt: string };
 
 /** Read a day's conflicts once for all public menus and staff. Never cache user data. */
-export async function dateAvailableStarts(storeId: string, date: string, db = supabaseServer()): Promise<DateSlot[]> {
+export async function dateAvailability(storeId: string, date: string, db = supabaseServer()): Promise<{ slots: DateSlot[]; times: string[] }> {
   const [menus, assignments, hours] = await Promise.all([
     db.from("services").select("id,active,online_bookable,duration_minutes,buffer_before,buffer_after").eq("store_id", storeId),
     db.from("staff_services").select("service_id,staff_id,staff!inner(name,active,store_id)").eq("staff.active", true).eq("staff.store_id", storeId),
@@ -19,7 +19,7 @@ export async function dateAvailableStarts(storeId: string, date: string, db = su
   }
   const services = menus.data!;
   const publicMenus = services.filter(s => s.active && s.online_bookable);
-  if (!publicMenus.length || !hours.data!.length) return [];
+  if (!publicMenus.length || !hours.data!.length) return { slots: [], times: [] };
   const dayStart = new Date(`${date}T00:00:00+09:00`), dayEnd = addMinutes(dayStart, 1440);
   const maxBefore = Math.max(0, ...services.map(s => s.buffer_before));
   const maxAfter = Math.max(0, ...services.map(s => s.buffer_after));
@@ -40,6 +40,8 @@ export async function dateAvailableStarts(storeId: string, date: string, db = su
   const sharedBusy = googleBusy.map(r => ({ start: new Date(r.start), end: new Date(r.end) }));
   const occupiedByStaff = new Map<string, { start: Date; end: Date }[]>();
   const result: DateSlot[] = [];
+  const rowTimes = new Set<string>();
+  const rowConfigurations = new Set<string>();
   for (const menu of publicMenus) for (const link of assignments.data!.filter(a => a.service_id === menu.id)) {
     const staff = Array.isArray(link.staff) ? link.staff[0] : link.staff;
     if (!staff) throw new Error("Staff missing");
@@ -56,8 +58,21 @@ export async function dateAvailableStarts(storeId: string, date: string, db = su
       ];
       occupiedByStaff.set(link.staff_id, occupied);
     }
+    // Rows remain visible when every appointment at a time is occupied.
+    const rowKey = `${menu.duration_minutes}:${menu.buffer_before}:${menu.buffer_after}`;
+    if (!rowConfigurations.has(rowKey)) {
+      rowConfigurations.add(rowKey);
+      for (const candidate of findAvailableStarts({ open, occupied: [], durationMinutes: menu.duration_minutes, bufferBefore: menu.buffer_before, bufferAfter: menu.buffer_after })) {
+        rowTimes.add(new Date(candidate.getTime() + 9 * 3600000).toISOString().slice(11, 16));
+      }
+    }
     const starts = new Set(findAvailableStarts({ open, occupied, durationMinutes: menu.duration_minutes, bufferBefore: menu.buffer_before, bufferAfter: menu.buffer_after }).map(s => s.toISOString()));
     for (const startAt of starts) result.push({ serviceId: menu.id, staffId: link.staff_id, staffName: staff.name, startAt });
   }
-  return result.sort((a, b) => a.startAt.localeCompare(b.startAt));
+  return { slots: result.sort((a, b) => a.startAt.localeCompare(b.startAt)), times: [...rowTimes].sort() };
+}
+
+/** Compatibility for existing callers that only need the available starts. */
+export async function dateAvailableStarts(storeId: string, date: string, db = supabaseServer()): Promise<DateSlot[]> {
+  return (await dateAvailability(storeId, date, db)).slots;
 }

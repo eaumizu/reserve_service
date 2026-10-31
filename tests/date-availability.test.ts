@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { from, googleBusy } = vi.hoisted(() => ({ from: vi.fn(), googleBusy: vi.fn() }));
 vi.mock("../lib/supabase-server", () => ({ supabaseServer: () => ({ from }) }));
 vi.mock("../lib/google-calendar-busy", () => ({ refreshCalendarBusy: googleBusy }));
-import { dateAvailableStarts } from "../lib/reservations/date-availability";
+import { dateAvailableStarts, dateAvailability } from "../lib/reservations/date-availability";
 import { adminAvailableStarts } from "../lib/reservations/admin-availability";
 
 const store = "trusted-store", day = "2030-01-01";
@@ -36,6 +36,15 @@ beforeEach(() => {
   });
 });
 describe("date-first availability", () => {
+  it("keeps timetable rows when the entire day is busy without inventing available starts", async () => {
+    googleBusy.mockResolvedValue([{ start: time("00:00"), end: time("23:59") }]);
+    const result = await dateAvailability(store, day);
+    expect(result.slots).toEqual([]);
+    expect(result.times[0]).toBe("09:15");
+    expect(result.times.at(-1)).toBe("11:15");
+    expect(result.times.every(t => /^\d{2}:(00|15|30|45)$/.test(t))).toBe(true);
+    expect(queries).toHaveLength(5);
+  });
   it("matches existing buffer-aware availability for each menu/staff with five shared DB reads", async () => {
     tables.reservations = [{ store_id: store, staff_id: "a", status: "confirmed", start_at: time("10:30"), end_at: time("11:00"), services: { buffer_before: 15, buffer_after: 10 } }];
     tables.availability_blocks = [{ store_id: store, staff_id: "b", start_at: time("09:00"), end_at: time("10:00") }];
