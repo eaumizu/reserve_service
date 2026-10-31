@@ -2,10 +2,16 @@
 import { parseCustomerEmail,parseCustomerPhone } from "../lib/reservations/email";
 import { useEffect, useRef, useState } from "react";
 import type { BookingRules } from "../lib/booking-rules";
+import { BookingCalendar, type CalendarChoice } from "./BookingCalendar";
 type Service = { id: string; name: string; duration_minutes: number; price: number };
 type Slot = { staffId: string; staffName: string; startAt: string };
 type Rules = BookingRules & { minDate: string; maxDate: string };
 export function BookingFlow() {
+  const [mode, setMode] = useState<"menu" | "date">("menu");
+  const [calendarVisible, setCalendarVisible] = useState(true);
+  const calendarSummary = useRef<HTMLHeadingElement>(null);
+  const pendingChoice = useRef<Slot | undefined>(undefined);
+  const calendarActive = mode === "date" && calendarVisible;
   const [notificationWarning,setNotificationWarning]=useState<string|null>(null);
   const [managePath,setManagePath]=useState<string|null>(null);
   const [services, setServices] = useState<Service[]>([]);
@@ -40,7 +46,7 @@ export function BookingFlow() {
   useEffect(() => {
     let active = true;
     setSlot(undefined); setSlots([]);setAvailabilityError("");
-    if (!service || !date || !rules) {setLoading(false);return;}
+    if (calendarActive || !service || !date || !rules) {setLoading(false);return;}
     setLoading(true);
     let inFlight=false;
     const controller=new AbortController();
@@ -54,6 +60,13 @@ export function BookingFlow() {
         const result=await response.json();if(!response.ok)throw new Error(result.error);
         if(!canApply())return;
         const available:Slot[]=result.slots??[];setSlots(available);setAvailabilityError("");
+        const pending=pendingChoice.current;
+        if(pending){
+          pendingChoice.current=undefined;
+          const verified=available.find(s=>s.staffId===pending.staffId&&s.startAt===pending.startAt);
+          setSlot(verified);
+          if(!verified)setError("選択した時間は受付できなくなりました。日時・メニューを選び直してください。");
+        }
         const current=selection.current;
         if(current.slot&&!available.some(s=>s.staffId===current.slot!.staffId&&s.startAt===current.slot!.startAt)){
           setSlot(undefined);
@@ -61,7 +74,7 @@ export function BookingFlow() {
         }
       }catch(e){
         if(!canApply())return;
-        setSlots([]);setSlot(undefined);setAvailabilityError(e instanceof Error?e.message:"空き枠を取得できません。");
+        pendingChoice.current=undefined;setSlots([]);setSlot(undefined);setAvailabilityError(e instanceof Error?e.message:"空き枠を取得できません。");
         if(selection.current.stage==="confirm")setStage("form");
       }finally{inFlight=false;if(active)setLoading(false);}
     }
@@ -70,7 +83,16 @@ export function BookingFlow() {
     const timer=window.setInterval(resume,30000);
     window.addEventListener("focus",resume);window.addEventListener("pageshow",resume);document.addEventListener("visibilitychange",resume);
     return () => { active = false;controller.abort();window.clearInterval(timer);window.removeEventListener("focus",resume);window.removeEventListener("pageshow",resume);document.removeEventListener("visibilitychange",resume); };
-  }, [service, date, rules, availabilityVersion]);
+  }, [service, date, rules, availabilityVersion, calendarActive, mode]);
+  useEffect(() => { if (mode === "date" && !calendarVisible) calendarSummary.current?.focus(); }, [mode, calendarVisible]);
+  function switchMode(next: "menu" | "date") {
+    if(next===mode)return;
+    pendingChoice.current=undefined;setSlot(undefined);setSlots([]);setError("");setAvailabilityError("");setCalendarVisible(true);setMode(next);
+  }
+  function chooseCalendar(choice: CalendarChoice) {
+    pendingChoice.current=choice.slot;setSlot(undefined);setError("");setAvailabilityError("");
+    setService(choice.service);setDate(choice.date);setCalendarVisible(false);
+  }
   async function submit() {
     if (submission.current!=="idle" || !service || !slot) return;
     // Saving the booking closes its own slot before notification delivery ends.
@@ -91,11 +113,24 @@ export function BookingFlow() {
     {rules && <p className="muted">Web予約は日本時間で今日から{rules.advance_days}日先まで、施術開始の{rules.cutoff_minutes === 0 ? "直前" : `${rules.cutoff_minutes}分前`}まで受付します。</p>}
     {(error||availabilityError) && <p className="error" role="alert">{error||availabilityError}</p>}
     {stage === "form" && <>
+      <div className="booking-methods" role="group" aria-label="予約方法を選択">
+        <button type="button" aria-pressed={mode === "menu"} className={mode === "menu" ? "selected" : ""} onClick={() => switchMode("menu")}>メニューから選ぶ</button>
+        <button type="button" aria-pressed={mode === "date"} className={mode === "date" ? "selected" : ""} onClick={() => switchMode("date")}>日時から選ぶ</button>
+      </div>
+      {calendarActive ? rules ? <BookingCalendar initialDate={date} services={services} rules={rules} onChoose={chooseCalendar}/> : <p role="status">予約設定を読み込んでいます…</p> : <>
+      {mode === "menu" ? <>
       <label>施術メニュー<select value={service?.id ?? ""} onChange={e => { setSlot(undefined);setError(""); setService(services.find(s => s.id === e.target.value)); }}><option value="">選んでください</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}（{s.duration_minutes}分・¥{s.price.toLocaleString()}）</option>)}</select></label>
       <label>ご希望の日<input type="date" disabled={!rules} min={rules?.minDate} max={rules?.maxDate} value={date} onChange={e => { setSlot(undefined);setError(""); setDate(e.target.value); }} /></label>
+      </> : <div className="calendar-selection">
+        <h3 ref={calendarSummary} tabIndex={-1}>選択した日時・メニュー</h3>
+        <p>{new Date(`${date}T00:00:00+09:00`).toLocaleDateString("ja-JP", { month: "long", day: "numeric", weekday: "short", timeZone: "Asia/Tokyo" })}
+          {slot && ` ${new Date(slot.startAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}／${slot.staffName}`}</p>
+        <p>{service?.name}（{service?.duration_minutes}分・¥{service?.price.toLocaleString()}）</p>
+        <button type="button" onClick={() => {pendingChoice.current=undefined;setSlot(undefined);setError("");setCalendarVisible(true);}}>日時・メニューを選び直す</button>
+      </div>}
       {loading && <p role="status">空き枠を確認しています…</p>}
-      {date && <div className="grid">{slots.map(s => <button className={slot?.startAt === s.startAt && slot.staffId === s.staffId ? "selected" : ""} key={s.staffId + s.startAt} onClick={() => {setSlot(s);setError("");}}>{new Date(s.startAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}{s.staffName&&<><br /><small>{s.staffName}</small></>}</button>)}</div>}
-      {!loading && service && date && !slots.length && !error && !availabilityError && <p>この日に受付できる空き枠はありません。別の日付を選択してください。</p>}
+      {mode === "menu" && date && <div className="grid">{slots.map(s => <button className={slot?.startAt === s.startAt && slot.staffId === s.staffId ? "selected" : ""} key={s.staffId + s.startAt} onClick={() => {setSlot(s);setError("");}}>{new Date(s.startAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" })}{s.staffName&&<><br /><small>{s.staffName}</small></>}</button>)}</div>}
+      {mode === "menu" && !loading && service && date && !slots.length && !error && !availabilityError && <p>この日に受付できる空き枠はありません。別の日付を選択してください。</p>}
       <label>お名前<input value={name} onChange={e => setName(e.target.value)} /></label>
       <label>電話番号（任意）<input type="tel" autoComplete="tel" maxLength={50} inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} /></label>
       <label>メールアドレス（必須）<input required type="email" autoComplete="email" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} /></label>
@@ -103,9 +138,10 @@ export function BookingFlow() {
       {parseCustomerPhone(phone)===undefined&&<p className="error">電話番号を確認してください。</p>}
       {email.trim()&&!parseCustomerEmail(email)&&<p className="error">メールアドレスを確認してください。</p>}
       <button className="primary" disabled={!parseCustomerEmail(email) || parseCustomerPhone(phone)===undefined || !rules || !service || !slot || !name.trim() || loading} onClick={() => setStage("confirm")}>確認画面へ</button>
+      </>}
     </>}
     {stage === "confirm" && <>
-      <p>{service?.name}<br />{slot && new Date(slot.startAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}{slot?.staffName&&`／${slot.staffName}`}<br />{name} 様{phone.trim()&&`（${phone}）`}<br />メール：{email.trim() || "記載なし"}</p>
+      <p>{service?.name}（{service?.duration_minutes}分・¥{service?.price.toLocaleString()}）<br />{slot && new Date(slot.startAt).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo" })}{slot?.staffName&&`／${slot.staffName}`}<br />{name} 様{phone.trim()&&`（${phone}）`}<br />メール：{email.trim() || "記載なし"}</p>
       <div className="grid"><button disabled={busy} onClick={() => setStage("form")}>戻る</button><button className="primary" disabled={busy} onClick={submit}>{busy ? "予約を確定中…" : "予約を確定する"}</button></div>
     </>}
   </section>;

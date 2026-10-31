@@ -100,3 +100,4 @@ jobs:
           node tests/reminder-ui.cjs
           node tests/booking-contact-ui.cjs
           node tests/booking-submit-race-ui.cjs
+          node tests/date-first-booking-ui.cjs
