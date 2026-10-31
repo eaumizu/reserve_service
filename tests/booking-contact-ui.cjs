@@ -7,9 +7,10 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
   await page.route('**/api/booking-mode',r=>r.fulfill({json:{mode:'menu'}}));
     await page.route('**/api/catalog',r=>r.fulfill({json:[{id:'service',name:'整体',duration_minutes:30,price:3000}]}));
   await page.route('**/api/booking-rules',r=>r.fulfill({json:{advance_days:30,cutoff_minutes:0,minDate:'2030-01-01',maxDate:'2030-01-31'}}));
-  await page.route('**/api/availability?*',r=>{reads++;return r.fulfill({json:{slots:googleBusy?[]:[{staffId:'staff',staffName:'',startAt:'2030-01-02T01:00:00Z'}]}});});
+  await page.route('**/api/availability?*',r=>{reads++;return r.fulfill({json:{slots:googleBusy?[]:[{staffId:'staff',staffName:'',startAt:'2030-01-02T01:00:00Z'},{staffId:'staff',staffName:'',startAt:'2030-01-02T01:15:00Z'}]}});});
   await page.route('**/api/reservations',async r=>{attempts++;if(googleBusy){await r.fulfill({status:409,json:{error:'その時間は受付できません。空き枠を選び直してください。'}});return;}sent=r.request().postDataJSON();await r.fulfill({status:201,json:{reservation:{id:'booking'},managePath:'/reservation#'+ 'a'.repeat(64)}});});
   await page.goto('http://127.0.0.1:3000/');await page.getByLabel('ご希望の日',{exact:true}).fill('2030-01-02');await page.getByRole('button',{name:'10:00',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'10:15',exact:true}).count(),0);
   await page.getByLabel('お名前',{exact:true}).fill('確認用');
   const confirm=page.getByRole('button',{name:'確認画面へ',exact:true});assert.equal(await confirm.isDisabled(),true,'email must be required');
   const email=page.getByLabel('メールアドレス（必須）',{exact:true});await email.fill('bad');assert.equal(await confirm.isDisabled(),true);

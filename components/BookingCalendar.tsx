@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { BookingRules } from "../lib/booking-rules";
 import type { DateSlot } from "../lib/reservations/date-availability";
-import { CLOCK_TIME_PATTERN } from "../lib/reservations/time-grid";
+import { PUBLIC_BOOKING_CLOCK_PATTERN, isPublicBookingStart } from "../lib/reservations/time-grid";
 
 export type BookingService = { id: string; name: string; duration_minutes: number; price: number };
 export type CalendarChoice = { service: BookingService; slot: DateSlot; date: string };
@@ -46,8 +46,8 @@ export function BookingCalendar({ services, rules, initialDate, onChoose }: { se
             const response = await fetch(`/api/date-availability?date=${day}`, { cache: "no-store", signal: controller.signal });
             const result = await response.json();
             if (!response.ok || !Array.isArray(result.slots)) throw new Error("Availability unavailable");
-            const slots: DateSlot[] = result.slots.filter((s: DateSlot) => localTime(s.startAt).slice(0, 10) === day);
-            const times = (Array.isArray(result.times) ? result.times : slots.map(s => timeLabel(s.startAt))).filter((t: unknown): t is string => typeof t === "string" && CLOCK_TIME_PATTERN.test(t));
+            const slots: DateSlot[] = result.slots.filter((s: DateSlot) => isPublicBookingStart(s.startAt) && localTime(s.startAt).slice(0, 10) === day);
+            const times = (Array.isArray(result.times) ? result.times : slots.map(s => timeLabel(s.startAt))).filter((t: unknown): t is string => typeof t === "string" && PUBLIC_BOOKING_CLOCK_PATTERN.test(t));
             update(day, { status: "ready", slots, times });
           } catch {
             update(day, { status: "error", slots: [], times: [] });

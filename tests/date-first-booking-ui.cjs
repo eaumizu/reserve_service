@@ -5,7 +5,7 @@ const short = { id: 'short', name: '基本整体', duration_minutes: 30, price: 
 const long = { id: 'long', name: 'じっくり整体', duration_minutes: 90, price: 8000 };
 const at = (day, clock) => new Date(`2030-01-${day}T${clock}:00+09:00`).toISOString();
 const slot = (serviceId, staffId, clock) => ({ serviceId, staffId, staffName: `担当${staffId}`, startAt: at('02', clock) });
-const available = [slot('short', 'A', '10:00'), slot('short', 'A', '10:15'), slot('short', 'A', '11:00'), slot('long', 'A', '11:00'), slot('long', 'B', '11:00')];
+const available = [slot('short', 'A', '10:00'), slot('short', 'A', '10:15'), slot('short', 'A', '10:30'), slot('short', 'A', '11:00'), slot('long', 'A', '11:00'), slot('long', 'B', '11:00')];
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 async function setup(browser, width) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
@@ -30,7 +30,7 @@ async function pick(page, time, menu, staff) {
     {
       const { page, errors } = await setup(browser, width);
       let reads = 0, singleReads = 0, attempts = 0, posted;
-      await page.route('**/api/date-availability?*', r => { reads++; const day = new URL(r.request().url()).searchParams.get('date'); return r.fulfill({ json: { times: ['10:00', '10:15', '11:00'], slots: day === '2030-01-02' ? available : [] } }); });
+      await page.route('**/api/date-availability?*', r => { reads++; const day = new URL(r.request().url()).searchParams.get('date'); return r.fulfill({ json: { times: ['10:00', '10:15', '10:30', '11:00'], slots: day === '2030-01-02' ? available : [] } }); });
       await page.route('**/api/availability?*', r => { singleReads++; const id = new URL(r.request().url()).searchParams.get('serviceId'); return r.fulfill({ json: { slots: available.filter(s => s.serviceId === id) } }); });
       await page.route('**/api/reservations', async r => {
         attempts++;
@@ -47,6 +47,9 @@ async function pick(page, time, menu, staff) {
       assert.equal(await page.getByRole('button', { name: '次の週', exact: true }).isDisabled(), true);
       await page.getByRole('button', { name: '前の週', exact: true }).click();
       await cell(page, '10:00').click();
+      assert.equal(await page.getByRole('rowheader', {name:'10:15',exact:true}).count(),0,'quarter-hour rows stay hidden even with old API responses');
+      assert.equal(await page.getByRole('button',{name:/10:15 予約可能$/}).count(),0);
+      await cell(page,'10:30').waitFor();
       assert.equal(singleReads, 0, 'calendar bulk read replaces per-menu requests');
       assert.equal(await page.getByRole('button', { name: /じっくり整体/ }).count(), 0, 'long menu cannot fit this start');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -84,7 +87,7 @@ async function pick(page, time, menu, staff) {
     {
       const { page, errors } = await setup(browser, width);
       let failed = false, occupied = false, reads = 0;
-      await page.route('**/api/date-availability?*', r => { reads++; return r.fulfill(failed ? { status: 503, json: { error: '空き枠を取得できません。' } } : { json: { times: ['10:00', '10:15', '11:00'], slots: occupied ? [] : available } }); });
+      await page.route('**/api/date-availability?*', r => { reads++; return r.fulfill(failed ? { status: 503, json: { error: '空き枠を取得できません。' } } : { json: { times: ['10:00', '10:15', '10:30', '11:00'], slots: occupied ? [] : available } }); });
       await page.goto(base); assert.equal(await page.getByRole('button', { name: '日時から選ぶ', exact: true }).count(), 0);
       await cell(page, '10:00').click(); await page.getByRole('button', { name: /基本整体/ }).click();
       occupied = true; await page.clock.runFor(60000);
@@ -104,8 +107,8 @@ async function pick(page, time, menu, staff) {
       const { page, errors } = await setup(browser, width);
       const started = deferred(), release = deferred();
       await page.route('**/api/date-availability?*', async r => {
-        if (new URL(r.request().url()).searchParams.get('date') === '2030-01-02') { started.resolve(); await release.promise; return r.fulfill({ json: { times: ['10:00', '10:15', '11:00'], slots: available } }).catch(() => {}); }
-        return r.fulfill({ json: { times: ['10:00', '10:15', '11:00'], slots: [] } });
+        if (new URL(r.request().url()).searchParams.get('date') === '2030-01-02') { started.resolve(); await release.promise; return r.fulfill({ json: { times: ['10:00', '10:15', '10:30', '11:00'], slots: available } }).catch(() => {}); }
+        return r.fulfill({ json: { times: ['10:00', '10:15', '10:30', '11:00'], slots: [] } });
       });
       await page.goto(base); assert.equal(await page.getByRole('button', { name: '日時から選ぶ', exact: true }).count(), 0);
       await started.promise;
@@ -118,9 +121,9 @@ async function pick(page, time, menu, staff) {
     {
       const { page, errors } = await setup(browser, width);
       let submissions = 0;
-      await page.route('**/api/date-availability?*', r => r.fulfill({ json: { times: ['10:00', '10:15', '11:00'], slots: available } }));
+      await page.route('**/api/date-availability?*', r => r.fulfill({ json: { times: ['10:00', '10:15', '10:30', '11:00'], slots: available } }));
       // The earlier calendar snapshot was valid, but the chosen staff is now busy.
-      await page.route('**/api/availability?*', r => r.fulfill({ json: { times: ['10:00', '10:15', '11:00'], slots: [] } }));
+      await page.route('**/api/availability?*', r => r.fulfill({ json: { times: ['10:00', '10:15', '10:30', '11:00'], slots: [] } }));
       await page.route('**/api/reservations', r => { submissions++; return r.fulfill({ status: 500, json: {} }); });
       await page.goto(base); assert.equal(await page.getByRole('button', { name: '日時から選ぶ', exact: true }).count(), 0);
       await pick(page, '10:00', '基本整体');
@@ -157,7 +160,7 @@ async function pick(page, time, menu, staff) {
       assert.equal(await page.getByRole('button', { name: /^2030年1月31日.*予約可能$/ }).count(), 0);
       assert.equal(await page.getByLabel('2030年1月31日(木) 10:00 確認できません', { exact: true }).isVisible(), true);
       assert.equal(await page.getByLabel('2030年2月1日(金) 10:30 受付不可', { exact: true }).isVisible(), true);
-      const keyboard = page.getByRole('button', { name: '2030年2月1日(金) 10:15 予約可能', exact: true });
+      const keyboard = page.getByRole('button', { name: '2030年2月1日(金) 10:00 予約可能', exact: true });
       await keyboard.focus(); await keyboard.press('Enter');
       await page.getByRole('button', { name: /基本整体/ }).waitFor();
       await page.getByRole('button', { name: '次の週', exact: true }).click();

@@ -6,7 +6,7 @@ export const maxDuration=60;
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "../../../lib/supabase-server";
 import type { ReservationInput } from "../../../lib/reservations/types";
-import { isGridTimestamp } from "../../../lib/reservations/time-grid";
+import { isPublicBookingStart } from "../../../lib/reservations/time-grid";
 import { readBookingRules } from "../../../lib/booking-rules-server";
 import { acceptsWebBooking } from "../../../lib/booking-rules";
 import { parseCustomerEmail,parseCustomerPhone } from "../../../lib/reservations/email";
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const phone=parseCustomerPhone(body.customerPhone);if(phone===undefined)return NextResponse.json({error:"電話番号の入力内容を確認してください。"},{status:400});
     const email = parseCustomerEmail(body.customerEmail);
     if (!email) return NextResponse.json({ error: "メールアドレスを確認してください。" }, { status: 400 });
-    if (!isGridTimestamp(body.startAt)) return NextResponse.json({ error: "開始時間は15分刻みの空き枠から選択してください。" }, { status: 400 });
+    if (!isPublicBookingStart(body.startAt)) return NextResponse.json({ error: "開始時間は30分刻み（毎時00分・30分）の空き枠から選択してください。" }, { status: 400 });
     if (!acceptsWebBooking(body.startAt, await readBookingRules(storeId))) return NextResponse.json({ error: "予約受付期間または締め切りを過ぎています。別の空き枠を選択してください。" }, { status: 409 });
     try{await refreshCalendarBusyForStart(storeId,body.startAt);}catch{return NextResponse.json({error:"Googleカレンダーの予定を確認できません。時間をおいて空き枠を再取得してください。"},{status:503});}
     const token=createCustomerToken();

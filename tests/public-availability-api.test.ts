@@ -23,6 +23,12 @@ beforeEach(() => {
   });
 });
 describe("public availability respects managed blocks", () => {
+  it("exposes only 00/30 starts from the underlying quarter-hour operational calculation", async () => {
+    const times = ["00", "15", "30", "45"].map(m => `2030-01-01T03:${m}:00.000Z`);
+    adminAvailableStarts.mockResolvedValue(times);
+    const r = await GET(request());
+    expect((await r.json()).slots.map((s: { startAt: string }) => s.startAt)).toEqual([times[0], times[2]]);
+  });
   it("uses shared calculation only for public menus and store staff", async () => {
     const response = await GET(request());
     expect(response.status).toBe(200);

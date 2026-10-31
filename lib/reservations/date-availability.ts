@@ -1,7 +1,7 @@
 import { supabaseServer } from "../supabase-server";
 import { refreshCalendarBusy } from "../google-calendar-busy";
 import { addMinutes, findAvailableStarts } from "./availability";
-import { TIME_STEP_MS } from "./time-grid";
+import { PUBLIC_BOOKING_STEP_MS, PUBLIC_BOOKING_STEP_MINUTES } from "./time-grid";
 
 export type DateSlot = { serviceId: string; staffId: string; staffName: string; startAt: string };
 
@@ -34,7 +34,7 @@ export async function dateAvailability(storeId: string, date: string, db = supab
     if (result.error || !result.data || result.data.length >= 1000) throw new Error("Availability conflicts incomplete");
   }
   const open = hours.data!.map(h => ({
-    start: new Date(Math.ceil(Date.parse(`${date}T${h.start_time}+09:00`) / TIME_STEP_MS) * TIME_STEP_MS),
+    start: new Date(Math.ceil(Date.parse(`${date}T${h.start_time}+09:00`) / PUBLIC_BOOKING_STEP_MS) * PUBLIC_BOOKING_STEP_MS),
     end: new Date(`${date}T${h.end_time}+09:00`),
   }));
   const sharedBusy = googleBusy.map(r => ({ start: new Date(r.start), end: new Date(r.end) }));
@@ -62,11 +62,11 @@ export async function dateAvailability(storeId: string, date: string, db = supab
     const rowKey = `${menu.duration_minutes}:${menu.buffer_before}:${menu.buffer_after}`;
     if (!rowConfigurations.has(rowKey)) {
       rowConfigurations.add(rowKey);
-      for (const candidate of findAvailableStarts({ open, occupied: [], durationMinutes: menu.duration_minutes, bufferBefore: menu.buffer_before, bufferAfter: menu.buffer_after })) {
+      for (const candidate of findAvailableStarts({ open, occupied: [], durationMinutes: menu.duration_minutes, bufferBefore: menu.buffer_before, bufferAfter: menu.buffer_after, intervalMinutes: PUBLIC_BOOKING_STEP_MINUTES })) {
         rowTimes.add(new Date(candidate.getTime() + 9 * 3600000).toISOString().slice(11, 16));
       }
     }
-    const starts = new Set(findAvailableStarts({ open, occupied, durationMinutes: menu.duration_minutes, bufferBefore: menu.buffer_before, bufferAfter: menu.buffer_after }).map(s => s.toISOString()));
+    const starts = new Set(findAvailableStarts({ open, occupied, durationMinutes: menu.duration_minutes, bufferBefore: menu.buffer_before, bufferAfter: menu.buffer_after, intervalMinutes: PUBLIC_BOOKING_STEP_MINUTES }).map(s => s.toISOString()));
     for (const startAt of starts) result.push({ serviceId: menu.id, staffId: link.staff_id, staffName: staff.name, startAt });
   }
   return { slots: result.sort((a, b) => a.startAt.localeCompare(b.startAt)), times: [...rowTimes].sort() };

@@ -1,4 +1,5 @@
 "use client";
+import { isPublicBookingStart } from "../lib/reservations/time-grid";
 import { useEffect,useRef,useState } from "react";
 import type { CustomerBooking } from "../lib/customer-booking";
 import {CustomerLineLink} from "./CustomerLineLink";
@@ -31,7 +32,7 @@ export function CustomerBookingManager(){
   async function loadSlots(value:string){
     const seq=++sequence.current;setDate(value);setSlots([]);setStart("");setError("");
     if(!value){setLoading(false);return;}setLoading(true);
-    try{const result=await request({action:"slots",date:value});if(seq===sequence.current)setSlots(result.staffSlots);}
+    try{const result=await request({action:"slots",date:value});if(seq===sequence.current)setSlots((result.staffSlots??[]).map((group:StaffSlots)=>({...group,starts:group.starts.filter(isPublicBookingStart)})));}
     catch(e){if(seq===sequence.current)setError(e instanceof Error?e.message:"空き枠を取得できません。");}
     finally{if(seq===sequence.current)setLoading(false);}
   }

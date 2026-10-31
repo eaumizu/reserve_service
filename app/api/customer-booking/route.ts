@@ -7,7 +7,7 @@ import { CUSTOMER_TOKEN, CUSTOMER_HEADERS, hashCustomerToken, type CustomerBooki
 import { adminAvailableStarts, isBookingDate } from "../../../lib/reservations/admin-availability";
 import { readBookingRules } from "../../../lib/booking-rules-server";
 import { acceptsWebBooking, bookingDateBounds } from "../../../lib/booking-rules";
-import { isGridTimestamp } from "../../../lib/reservations/time-grid";
+import { isPublicBookingStart } from "../../../lib/reservations/time-grid";
 const respond = (value: unknown, status=200) => NextResponse.json(value,{status,headers:CUSTOMER_HEADERS});
 export async function POST(request: NextRequest) {
   try {
@@ -35,14 +35,14 @@ export async function POST(request: NextRequest) {
       const groups=await Promise.all(roster.data.map(async (staff:{id:string;name:string})=>({
         staffId:staff.id,staffName:staff.name,
         starts:(await adminAvailableStarts(booking.storeId,booking.serviceId,staff.id,body.date,booking.id)??[])
-          .filter(start=>acceptsWebBooking(start,rules))
+          .filter(start=>isPublicBookingStart(start)&&acceptsWebBooking(start,rules))
       })));
       return respond({staffSlots:groups});
     }
     if (!["cancel","reschedule"].includes(body.action) || typeof body.expectedUpdatedAt!=="string" ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/.test(body.expectedUpdatedAt) ||
       !Number.isFinite(Date.parse(body.expectedUpdatedAt))) return respond({error:"予約を再読み込みしてください。"},400);
-    if (body.action==="reschedule" && (typeof body.startAt!=="string" || !isGridTimestamp(body.startAt))) return respond({error:"空き枠から日時を選んでください。"},400);
+    if (body.action==="reschedule" && (typeof body.startAt!=="string" || !isPublicBookingStart(body.startAt))) return respond({error:"30分刻み（毎時00分・30分）の空き枠から日時を選んでください。"},400);
     if(body.action==="reschedule" && body.staffId!==undefined &&
       (typeof body.staffId!=="string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(body.staffId)))
       return respond({error:"担当者名付きの空き枠から選んでください。"},400);
