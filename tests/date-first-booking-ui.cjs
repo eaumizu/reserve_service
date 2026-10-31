@@ -11,6 +11,7 @@ async function setup(browser, width) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   page.setDefaultTimeout(20000); page.setDefaultNavigationTimeout(60000);
   await page.clock.install({ time: new Date('2030-01-01T00:00:00Z') });
+  await page.route('**/api/booking-mode', r => r.fulfill({ json: { mode: 'date' } }));
   await page.route('**/api/catalog', r => r.fulfill({ json: [short, long] }));
   await page.route('**/api/booking-rules', r => r.fulfill({ json: { advance_days: 8, cutoff_minutes: 0, minDate: '2030-01-01', maxDate: '2030-01-09' } }));
   const errors = []; page.on('pageerror', e => errors.push(e.message));
@@ -37,7 +38,7 @@ async function pick(page, time, menu, staff) {
         return r.fulfill({ status: 201, json: { reservation: { id: 'test' }, managePath: '/reservation#' + 'a'.repeat(64) } });
       });
       await page.goto(base);
-      await page.getByRole('button', { name: '日時から選ぶ', exact: true }).click();
+      assert.equal(await page.getByRole('button', { name: '日時から選ぶ', exact: true }).count(), 0);
       await page.getByText('この日に受付できる空き枠はありません。別の日付を選択してください。', { exact: true }).waitFor();
       assert.equal(await page.getByRole('button', { name: '前の7日間', exact: true }).isDisabled(), true);
       await page.getByRole('button', { name: '次の7日間', exact: true }).click();
@@ -83,7 +84,7 @@ async function pick(page, time, menu, staff) {
       const { page, errors } = await setup(browser, width);
       let failed = false, occupied = false, reads = 0;
       await page.route('**/api/date-availability?*', r => { reads++; return r.fulfill(failed ? { status: 503, json: { error: '空き枠を取得できません。' } } : { json: { slots: occupied ? [] : available } }); });
-      await page.goto(base); await page.getByRole('button', { name: '日時から選ぶ', exact: true }).click();
+      await page.goto(base); assert.equal(await page.getByRole('button', { name: '日時から選ぶ', exact: true }).count(), 0);
       await page.getByRole('button', { name: '10:00', exact: true }).click(); await page.getByRole('button', { name: /基本整体/ }).click();
       occupied = true; await page.clock.runFor(30000);
       await page.getByRole('alert').filter({ hasText: '選択した時間は受付できなくなりました。' }).waitFor();
@@ -93,11 +94,10 @@ async function pick(page, time, menu, staff) {
       assert.equal(await page.getByRole('button', { name: '10:00', exact: true }).count(), 0);
       failed = false; occupied = false; await page.getByRole('button', { name: 'もう一度確認する', exact: true }).click();
       await page.getByRole('button', { name: '10:00', exact: true }).waitFor();
-      await page.getByRole('button', { name: 'メニューから選ぶ', exact: true }).click();
-      await page.getByRole('combobox', { name: /施術メニュー/ }).waitFor();
-      const before = reads; await page.clock.runFor(60000); assert.equal(reads, before, 'calendar stops when menu mode is selected');
+      assert.equal(await page.getByRole('button', { name: 'メニューから選ぶ', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('combobox', { name: /施術メニュー/ }).count(), 0, 'menu-first controls never appear on the calendar page');
       assert.deepEqual(errors, []); await page.close();
-      console.log(`PASS ${width}px calendar refresh, lost slot, failure/retry and original menu entry`);
+      console.log(`PASS ${width}px calendar refresh, lost slot, failure/retry and isolated calendar page`);
     }
     {
       const { page, errors } = await setup(browser, width);
@@ -106,7 +106,7 @@ async function pick(page, time, menu, staff) {
         if (new URL(r.request().url()).searchParams.get('date') === '2030-01-02') { started.resolve(); await release.promise; return r.fulfill({ json: { slots: available } }).catch(() => {}); }
         return r.fulfill({ json: { slots: [] } });
       });
-      await page.goto(base); await page.getByRole('button', { name: '日時から選ぶ', exact: true }).click();
+      await page.goto(base); assert.equal(await page.getByRole('button', { name: '日時から選ぶ', exact: true }).count(), 0);
       await page.getByLabel('日付を指定する', { exact: true }).fill('2030-01-02'); await started.promise;
       await page.getByLabel('日付を指定する', { exact: true }).fill('2030-01-03'); release.resolve();
       await page.getByText('この日に受付できる空き枠はありません。別の日付を選択してください。', { exact: true }).waitFor();
@@ -121,7 +121,7 @@ async function pick(page, time, menu, staff) {
       // The earlier calendar snapshot was valid, but the chosen staff is now busy.
       await page.route('**/api/availability?*', r => r.fulfill({ json: { slots: [] } }));
       await page.route('**/api/reservations', r => { submissions++; return r.fulfill({ status: 500, json: {} }); });
-      await page.goto(base); await page.getByRole('button', { name: '日時から選ぶ', exact: true }).click();
+      await page.goto(base); assert.equal(await page.getByRole('button', { name: '日時から選ぶ', exact: true }).count(), 0);
       await page.getByLabel('日付を指定する', { exact: true }).fill('2030-01-02');
       await pick(page, '10:00', '基本整体');
       await page.getByRole('alert').filter({ hasText: '選択した時間は受付できなくなりました。' }).waitFor();
