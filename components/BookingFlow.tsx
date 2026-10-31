@@ -1,4 +1,5 @@
 "use client";
+import { isPublicBookingStart } from "../lib/reservations/time-grid";
 import { parseCustomerEmail,parseCustomerPhone } from "../lib/reservations/email";
 import { useEffect, useRef, useState } from "react";
 import type { BookingMode } from "../lib/booking-mode";
@@ -59,7 +60,7 @@ export function BookingFlow({ mode }: { mode: BookingMode }) {
         const response=await fetch(`/api/availability?serviceId=${service!.id}&date=${date}`,{cache:"no-store",signal:controller.signal});
         const result=await response.json();if(!response.ok)throw new Error(result.error);
         if(!canApply())return;
-        const available:Slot[]=result.slots??[];setSlots(available);setAvailabilityError("");
+        const available:Slot[]=(result.slots??[]).filter((s:Slot)=>isPublicBookingStart(s.startAt));setSlots(available);setAvailabilityError("");
         const pending=pendingChoice.current;
         if(pending){
           pendingChoice.current=undefined;

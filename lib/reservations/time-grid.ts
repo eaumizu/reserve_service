@@ -10,3 +10,12 @@ export function isGridTimestamp(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
     Number.isFinite(Date.parse(value)) && Date.parse(value) % TIME_STEP_MS === 0;
 }
+
+// Public start times are separate from the 15-minute operational grid used for
+// treatment/buffer settings, closures, and staff adjustments of existing bookings.
+export const PUBLIC_BOOKING_STEP_MINUTES = 30;
+export const PUBLIC_BOOKING_STEP_MS = PUBLIC_BOOKING_STEP_MINUTES * 60_000;
+export const PUBLIC_BOOKING_CLOCK_PATTERN = /^([01]\d|2[0-3]):(00|30)$/;
+export function isPublicBookingStart(value: unknown): value is string {
+  return isGridTimestamp(value) && Date.parse(value) % PUBLIC_BOOKING_STEP_MS === 0;
+}

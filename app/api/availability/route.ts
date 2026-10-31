@@ -1,4 +1,5 @@
 export const maxDuration=60;
+import { isPublicBookingStart } from "../../../lib/reservations/time-grid";
 import { NextRequest, NextResponse } from "next/server";
 import { adminAvailableStarts } from "../../../lib/reservations/admin-availability";
 import { isBookingDate } from "../../../lib/reservations/date";
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     ]);
     if (service.error || links.error) throw new Error("Availability read failed");
     if (!service.data) return NextResponse.json({ error: "メニューが見つかりません。" }, { status: 404 });
-    // Share buffer-aware, quarter-hour calculation with manual bookings and moves.
+    // Share buffer-aware calculation; public starts are aligned to each half-hour.
     const slots = (await Promise.all((links.data ?? []).map(async link => {
       const staff = Array.isArray(link.staff) ? link.staff[0] : link.staff;
       if (!staff) throw new Error("Staff missing");
@@ -31,6 +32,6 @@ export async function GET(request: NextRequest) {
     }))).flat();
     // Evaluate cutoff after external reads, using one fresh clock for every staff.
     const window = webBookingWindow(rules);
-    return NextResponse.json({ slots: slots.filter(slot => window.accepts(slot.startAt)) }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ slots: slots.filter(slot => isPublicBookingStart(slot.startAt) && window.accepts(slot.startAt)) }, { headers: { "Cache-Control": "no-store" } });
   } catch { return NextResponse.json({ error: "空き枠を取得できません。" }, { status: 503 }); }
 }

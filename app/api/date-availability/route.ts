@@ -1,4 +1,5 @@
 export const maxDuration = 60;
+import { isPublicBookingStart, PUBLIC_BOOKING_CLOCK_PATTERN } from "../../../lib/reservations/time-grid";
 import { NextRequest, NextResponse } from "next/server";
 import { isBookingDate } from "../../../lib/reservations/date";
 import { dateAvailability } from "../../../lib/reservations/date-availability";
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     if (date < bounds.minDate || date > bounds.maxDate) return NextResponse.json({ slots: [], times: [] }, { headers });
     const result = await dateAvailability(storeId, date, db);
     const window = webBookingWindow(rules);
-    return NextResponse.json({ slots: result.slots.filter(s => window.accepts(s.startAt)), times: result.times }, { headers });
+    return NextResponse.json({ slots: result.slots.filter(s => isPublicBookingStart(s.startAt) && window.accepts(s.startAt)), times: result.times.filter(t => PUBLIC_BOOKING_CLOCK_PATTERN.test(t)) }, { headers });
   } catch {
     return NextResponse.json({ error: "空き枠を取得できません。時間をおいて再度お試しください。" }, { status: 503, headers });
   }

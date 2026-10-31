@@ -18,6 +18,12 @@ it("uses the configured store, returns only public slot metadata and never cache
   expect(available).toHaveBeenCalledExactlyOnceWith("trusted", "2030-01-01", db);
   expect(r.headers.get("cache-control")).toBe("no-store");
 });
+it("filters quarter-hour data from both the public slots and timetable rows", async () => {
+  available.mockResolvedValue({ times: ["10:00", "10:15", "10:30", "10:45"], slots: ["00", "15", "30", "45"].map(m => ({ serviceId: "menu", staffId: "staff", staffName: "担当", startAt: `2030-01-01T01:${m}:00.000Z` })) });
+  const result = await (await GET(request("2030-01-01"))).json();
+  expect(result.times).toEqual(["10:00", "10:30"]);
+  expect(result.slots.map((s: { startAt: string }) => s.startAt)).toEqual(["2030-01-01T01:00:00.000Z", "2030-01-01T01:30:00.000Z"]);
+});
 it("rejects impossible dates and avoids reads outside the reception window", async () => {
   expect((await GET(request("2030-02-30"))).status).toBe(400); expect(rules).not.toHaveBeenCalled();
   expect(await (await GET(request("2029-12-31"))).json()).toEqual({ slots: [], times: [] });

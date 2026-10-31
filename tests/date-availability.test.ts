@@ -3,6 +3,7 @@ const { from, googleBusy } = vi.hoisted(() => ({ from: vi.fn(), googleBusy: vi.f
 vi.mock("../lib/supabase-server", () => ({ supabaseServer: () => ({ from }) }));
 vi.mock("../lib/google-calendar-busy", () => ({ refreshCalendarBusy: googleBusy }));
 import { dateAvailableStarts, dateAvailability } from "../lib/reservations/date-availability";
+import { isPublicBookingStart } from "../lib/reservations/time-grid";
 import { adminAvailableStarts } from "../lib/reservations/admin-availability";
 
 const store = "trusted-store", day = "2030-01-01";
@@ -36,13 +37,20 @@ beforeEach(() => {
   });
 });
 describe("date-first availability", () => {
+  it("keeps a 15-minute cleanup and waits until the next half-hour start", async () => {
+    tables.services = [{ ...menu("short", 60), buffer_before: 0, buffer_after: 15 }];
+    tables.staff_services = [link("short", "a")];
+    tables.business_hours = [{ store_id: store, weekday: 2, start_time: "09:00:00", end_time: "13:00:00" }];
+    tables.reservations = [{ store_id: store, staff_id: "a", status: "confirmed", start_at: time("09:00"), end_at: time("10:00"), services: { buffer_before: 0, buffer_after: 15 } }];
+    expect((await dateAvailability(store, day)).slots.map(s => s.startAt)).toEqual(["10:30", "11:00", "11:30"].map(t => new Date(time(t)).toISOString()));
+  });
   it("keeps timetable rows when the entire day is busy without inventing available starts", async () => {
     googleBusy.mockResolvedValue([{ start: time("00:00"), end: time("23:59") }]);
     const result = await dateAvailability(store, day);
     expect(result.slots).toEqual([]);
-    expect(result.times[0]).toBe("09:15");
-    expect(result.times.at(-1)).toBe("11:15");
-    expect(result.times.every(t => /^\d{2}:(00|15|30|45)$/.test(t))).toBe(true);
+    expect(result.times[0]).toBe("09:30");
+    expect(result.times.at(-1)).toBe("11:00");
+    expect(result.times.every(t => /^\d{2}:(00|30)$/.test(t))).toBe(true);
     expect(queries).toHaveLength(5);
   });
   it("matches existing buffer-aware availability for each menu/staff with five shared DB reads", async () => {
@@ -55,10 +63,10 @@ describe("date-first availability", () => {
     expect(queries.every(q => q.eq.mock.calls.some(c => (c[0] === "store_id" || c[0] === "staff.store_id") && c[1] === store))).toBe(true);
     for (const [serviceId, staffId] of [["short", "a"], ["short", "b"], ["long", "a"]]) {
       expect(slots.filter(s => s.serviceId === serviceId && s.staffId === staffId).map(s => s.startAt))
-        .toEqual(await adminAvailableStarts(store, serviceId, staffId, day));
+        .toEqual((await adminAvailableStarts(store, serviceId, staffId, day))?.filter(isPublicBookingStart));
     }
     expect(slots.some(s => s.serviceId === "hidden" || s.serviceId === "retired" || s.staffId === "inactive" || s.staffId === "foreign")).toBe(false);
-    expect(slots.some(s => s.serviceId === "short" && s.staffId === "b" && s.startAt === new Date(time("10:15")).toISOString())).toBe(true);
+    expect(slots.some(s => s.serviceId === "short" && s.staffId === "b" && s.startAt === new Date(time("10:30")).toISOString())).toBe(true);
   });
   it("includes adjacent-day buffers, staff closures and store-wide closures", async () => {
     tables.business_hours = [{ store_id: store, weekday: 2, start_time: "00:00:00", end_time: "02:00:00" }];
@@ -66,12 +74,12 @@ describe("date-first availability", () => {
     tables.availability_blocks = [{ store_id: store, staff_id: null, start_at: time("01:00"), end_at: time("01:30") }];
     const slots = await dateAvailableStarts(store, day);
     for (const [serviceId, staffId] of [["short", "a"], ["short", "b"], ["long", "a"]]) {
-      expect(slots.filter(s => s.serviceId === serviceId && s.staffId === staffId).map(s => s.startAt)).toEqual(await adminAvailableStarts(store, serviceId, staffId, day));
+      expect(slots.filter(s => s.serviceId === serviceId && s.staffId === staffId).map(s => s.startAt)).toEqual((await adminAvailableStarts(store, serviceId, staffId, day))?.filter(isPublicBookingStart));
     }
     expect(slots.filter(s => s.staffId === "a").every(s => s.startAt >= new Date(time("00:45")).toISOString())).toBe(true);
   });
   it("offers a short menu but not a long menu close to closing time", async () => {
-    const slots = await dateAvailableStarts(store, day), late = new Date(time("11:15")).toISOString();
+    const slots = await dateAvailableStarts(store, day), late = new Date(time("11:00")).toISOString();
     expect(slots.some(s => s.startAt === late && s.serviceId === "short")).toBe(true);
     expect(slots.some(s => s.startAt === late && s.serviceId === "long")).toBe(false);
   });
