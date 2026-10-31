@@ -1,13 +1,13 @@
 "use client";
 import { parseCustomerEmail,parseCustomerPhone } from "../lib/reservations/email";
 import { useEffect, useRef, useState } from "react";
+import type { BookingMode } from "../lib/booking-mode";
 import type { BookingRules } from "../lib/booking-rules";
 import { BookingCalendar, type CalendarChoice } from "./BookingCalendar";
 type Service = { id: string; name: string; duration_minutes: number; price: number };
 type Slot = { staffId: string; staffName: string; startAt: string };
 type Rules = BookingRules & { minDate: string; maxDate: string };
-export function BookingFlow() {
-  const [mode, setMode] = useState<"menu" | "date">("menu");
+export function BookingFlow({ mode }: { mode: BookingMode }) {
   const [calendarVisible, setCalendarVisible] = useState(true);
   const calendarSummary = useRef<HTMLHeadingElement>(null);
   const pendingChoice = useRef<Slot | undefined>(undefined);
@@ -85,10 +85,6 @@ export function BookingFlow() {
     return () => { active = false;controller.abort();window.clearInterval(timer);window.removeEventListener("focus",resume);window.removeEventListener("pageshow",resume);document.removeEventListener("visibilitychange",resume); };
   }, [service, date, rules, availabilityVersion, calendarActive, mode]);
   useEffect(() => { if (mode === "date" && !calendarVisible) calendarSummary.current?.focus(); }, [mode, calendarVisible]);
-  function switchMode(next: "menu" | "date") {
-    if(next===mode)return;
-    pendingChoice.current=undefined;setSlot(undefined);setSlots([]);setError("");setAvailabilityError("");setCalendarVisible(true);setMode(next);
-  }
   function chooseCalendar(choice: CalendarChoice) {
     pendingChoice.current=choice.slot;setSlot(undefined);setError("");setAvailabilityError("");
     setService(choice.service);setDate(choice.date);setCalendarVisible(false);
@@ -113,10 +109,6 @@ export function BookingFlow() {
     {rules && <p className="muted">Web予約は日本時間で今日から{rules.advance_days}日先まで、施術開始の{rules.cutoff_minutes === 0 ? "直前" : `${rules.cutoff_minutes}分前`}まで受付します。</p>}
     {(error||availabilityError) && <p className="error" role="alert">{error||availabilityError}</p>}
     {stage === "form" && <>
-      <div className="booking-methods" role="group" aria-label="予約方法を選択">
-        <button type="button" aria-pressed={mode === "menu"} className={mode === "menu" ? "selected" : ""} onClick={() => switchMode("menu")}>メニューから選ぶ</button>
-        <button type="button" aria-pressed={mode === "date"} className={mode === "date" ? "selected" : ""} onClick={() => switchMode("date")}>日時から選ぶ</button>
-      </div>
       {calendarActive ? rules ? <BookingCalendar initialDate={date} services={services} rules={rules} onChoose={chooseCalendar}/> : <p role="status">予約設定を読み込んでいます…</p> : <>
       {mode === "menu" ? <>
       <label>施術メニュー<select value={service?.id ?? ""} onChange={e => { setSlot(undefined);setError(""); setService(services.find(s => s.id === e.target.value)); }}><option value="">選んでください</option>{services.map(s => <option key={s.id} value={s.id}>{s.name}（{s.duration_minutes}分・¥{s.price.toLocaleString()}）</option>)}</select></label>

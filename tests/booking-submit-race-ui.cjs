@@ -10,6 +10,7 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
     const slot = { staffId: 'staff', staffName: '', startAt: '2030-01-02T01:00:00Z' };
     const availabilityStarted = deferred(), releaseAvailability = deferred(), bookingStarted = deferred(), releaseBooking = deferred();
     let holdAvailability = false, committed = false, reads = 0, submissions = 0;
+    await page.route('**/api/booking-mode',r=>r.fulfill({json:{mode:'menu'}}));
     await page.route('**/api/catalog', r => r.fulfill({ json: [{ id: 'service', name: '整体', duration_minutes: 60, price: 7000 }] }));
     await page.route('**/api/booking-rules', r => r.fulfill({ json: { advance_days: 30, cutoff_minutes: 0, minDate: '2030-01-01', maxDate: '2030-01-31' } }));
     await page.route('**/api/availability?*', async r => {

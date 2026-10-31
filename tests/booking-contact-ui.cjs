@@ -4,7 +4,8 @@ const {chromium}=require('playwright');const assert=require('node:assert/strict'
  for(const width of [1280,390]){
   const page=await browser.newPage({viewport:{width,height:844}});page.setDefaultTimeout(20000);let sent,googleBusy=false,attempts=0,reads=0;
   await page.clock.install({time:new Date('2030-01-01T00:00:00Z')});
-  await page.route('**/api/catalog',r=>r.fulfill({json:[{id:'service',name:'整体',duration_minutes:30,price:3000}]}));
+  await page.route('**/api/booking-mode',r=>r.fulfill({json:{mode:'menu'}}));
+    await page.route('**/api/catalog',r=>r.fulfill({json:[{id:'service',name:'整体',duration_minutes:30,price:3000}]}));
   await page.route('**/api/booking-rules',r=>r.fulfill({json:{advance_days:30,cutoff_minutes:0,minDate:'2030-01-01',maxDate:'2030-01-31'}}));
   await page.route('**/api/availability?*',r=>{reads++;return r.fulfill({json:{slots:googleBusy?[]:[{staffId:'staff',staffName:'',startAt:'2030-01-02T01:00:00Z'}]}});});
   await page.route('**/api/reservations',async r=>{attempts++;if(googleBusy){await r.fulfill({status:409,json:{error:'その時間は受付できません。空き枠を選び直してください。'}});return;}sent=r.request().postDataJSON();await r.fulfill({status:201,json:{reservation:{id:'booking'},managePath:'/reservation#'+ 'a'.repeat(64)}});});

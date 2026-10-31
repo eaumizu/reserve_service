@@ -6,6 +6,7 @@ import {AdminReminders} from "./AdminReminders";
 import {AdminEmailSettings} from "./AdminEmailSettings";
 import { AdminLineSettings } from "./AdminLineSettings";
 import { CLOCK_TIMES, DURATION_OPTIONS } from "../lib/reservations/time-grid";
+import type { BookingMode } from "../lib/booking-mode";
 import { DEFAULT_BOOKING_RULES, type BookingRules } from "../lib/booking-rules";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -30,6 +31,25 @@ function StoreNameEditor({ name, save }: { name: string; save: Save }) {
   return <form className="card" onSubmit={e => { e.preventDefault(); void save({ kind: "store", data: { name: value } }); }}>
     <h2>店舗名</h2><label>予約サイトに表示する店舗名<input required maxLength={100} value={value} onChange={e => setValue(e.target.value)} /></label>
     <button type="submit" className="primary">店舗名を保存</button>
+  </form>;
+}
+
+function BookingModeEditor({ setting, save }: { setting?: StoreSettings["bookingMode"]; save: Save }) {
+  const [mode, setMode] = useState<BookingMode>(setting?.mode ?? "menu");
+  const ready = setting?.ready === true;
+  return <form className="card" onSubmit={e => { e.preventDefault(); if (ready) void save({ kind: "booking_mode", data: { mode } }); }}>
+    <h2>予約画面の表示方式</h2>
+    <p className="muted">ホームページに表示する予約画面を1つ選びます。お客様向けの切り替えボタンは表示しません。</p>
+    {!ready && <p role="status">表示方式の保存には、追加のDB設定が必要です。現在はメニューから選ぶ画面を表示します。</p>}
+    <fieldset disabled={!ready} className="booking-mode-options">
+      <legend>表示する予約画面</legend>
+      <label className="checkline"><input type="radio" name="booking-mode" value="menu" checked={mode === "menu"} onChange={() => setMode("menu")}/>メニューから選ぶ</label>
+      <p className="muted">最初にメニューを選び、次に日付・空き時間を選びます。</p>
+      <label className="checkline"><input type="radio" name="booking-mode" value="date" checked={mode === "date"} onChange={() => setMode("date")}/>日時から選ぶ</label>
+      <p className="muted">最初から日時のカレンダーを表示します。空き時間を選んだ後に、予約できるメニューを確認します。</p>
+    </fieldset>
+    <p className="muted">保存後、ホームページを開き直すか再読み込みすると反映されます。予約入力中のお客様の画面は途中で切り替わりません。</p>
+    <button type="submit" className="primary" disabled={!ready}>予約画面の表示方式を保存</button>
   </form>;
 }
 
@@ -221,6 +241,7 @@ export function AdminStoreSettings({ auth, onBusy }: { auth: SupabaseClient; onB
     <AdminReminders auth={auth} onBusy={value=>{setBusy(value);onBusy(value);}} />
     </details>
     {loading ? <p>設定を読み込み中…</p> : settings && <fieldset disabled={busy} key={editorVersion} style={{ border: 0, padding: 0, margin: 0 }}>
+      <BookingModeEditor setting={settings.bookingMode} save={save} />
       <StoreNameEditor name={settings.store.name} save={save} />
       <BookingRulesEditor rules={settings.bookingRules ?? DEFAULT_BOOKING_RULES} save={save} />
       <h2>メニュー</h2>

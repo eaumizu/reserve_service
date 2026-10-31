@@ -1,3 +1,4 @@
+vi.mock("../lib/booking-mode-server", () => ({ readBookingMode: async () => ({ mode: "menu", ready: true }) }));
 vi.mock("../lib/booking-rules-server", () => ({ readBookingRules: async () => ({ advance_days: 30, cutoff_minutes: 60 }) }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
@@ -10,6 +11,20 @@ const request = (data = { kind: "store", data: { name: "新店舗" } }) => new N
 });
 beforeEach(() => { vi.resetAllMocks(); supabaseServer.mockReturnValue({ from, rpc }); });
 describe("admin-only store settings", () => {
+  it("saves the booking page mode only in the authenticated admin's store", async () => {
+    authorizeStaff.mockResolvedValue({ role: "admin", storeId: "verified-store" });
+    rpc.mockResolvedValue({ data: { id: "verified-store" }, error: null });
+    for (const mode of ["menu", "date"]) {
+      const r = await POST(new NextRequest("http://localhost/api/admin/settings", { method: "POST", body: JSON.stringify({ kind: "booking_mode", storeId: "other", data: { mode, store_id: "other" } }) }));
+      expect(r.status).toBe(200); expect(rpc).toHaveBeenLastCalledWith("save_booking_page_mode", { p_store_id: "verified-store", p_booking_mode: mode });
+    }
+    rpc.mockClear();
+    expect((await POST(new NextRequest("http://localhost/api/admin/settings", { method: "POST", body: JSON.stringify({ kind: "booking_mode", data: { mode: "both" } }) }))).status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+    authorizeStaff.mockResolvedValue({ role: "staff", storeId: "verified-store" });
+    expect((await POST(new NextRequest("http://localhost/api/admin/settings", { method: "POST", body: JSON.stringify({ kind: "booking_mode", data: { mode: "date" } }) }))).status).toBe(403);
+    expect(rpc).not.toHaveBeenCalled();
+  });
   it("saves booking rules only for the verified admin store", async () => {
     authorizeStaff.mockResolvedValue({ role: "admin", storeId: "verified-store" });
     rpc.mockResolvedValue({ data: { id: "verified-store" }, error: null });

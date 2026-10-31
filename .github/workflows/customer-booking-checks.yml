@@ -85,6 +85,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f tests/customer-ledger-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/google-calendar-busy-db.sql
           psql -v ON_ERROR_STOP=1 -f tests/required-booking-email-db.sql
+          psql -v ON_ERROR_STOP=1 -f tests/booking-page-mode-db.sql
       - name: Browser checks
         run: |
           npm install --no-save --no-audit --no-fund playwright
@@ -101,3 +102,4 @@ jobs:
           node tests/booking-contact-ui.cjs
           node tests/booking-submit-race-ui.cjs
           node tests/date-first-booking-ui.cjs
+          node tests/booking-page-mode-ui.cjs

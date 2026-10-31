@@ -1,3 +1,4 @@
+import { isBookingMode, type BookingMode } from "./booking-mode";
 import { CLOCK_TIME_PATTERN } from "./reservations/time-grid";
 import { validBookingRules, type BookingRules } from "./booking-rules";
 export type SettingsService = {
@@ -9,6 +10,7 @@ export type SettingsHour = { weekday: number; start_time: string; end_time: stri
 export type StoreSettings = {
   store: { id: string; name: string; timezone: string };
   bookingRules?: BookingRules;
+  bookingMode?: { mode: BookingMode; ready: boolean };
   services: SettingsService[]; staff: SettingsStaff[];
   links: { staff_id: string; service_id: string }[]; hours: SettingsHour[];
 };
@@ -17,6 +19,7 @@ type StaffEdit = Omit<SettingsStaff, "id"> & { id?: string; serviceIds: string[]
 export type SettingsChange =
   | {kind:"service_delete"|"staff_delete";data:{id:string}}
   | { kind: "store"; data: { name: string } }
+  | { kind: "booking_mode"; data: { mode: BookingMode } }
   | { kind: "booking_rules"; data: BookingRules }
   | { kind: "service"; data: ServiceEdit }
   | { kind: "staff"; data: StaffEdit }
@@ -33,6 +36,7 @@ export function parseSettingsChange(value: unknown): SettingsChange | null {
   if (!object(value) || !object(value.data)) return null;
   const data = value.data;
   if(value.kind==="service_delete"||value.kind==="staff_delete")return typeof data.id==="string"&&uuid.test(data.id)?{kind:value.kind,data:{id:data.id}}:null;
+  if (value.kind === "booking_mode") return isBookingMode(data.mode) ? { kind: "booking_mode", data: { mode: data.mode } } : null;
   if (value.kind === "booking_rules") return validBookingRules(data) ? { kind: "booking_rules", data: { advance_days: data.advance_days, cutoff_minutes: data.cutoff_minutes } } : null;
   if (value.kind === "store") return validName(data.name) ? { kind: "store", data: { name: data.name.trim() } } : null;
   if (value.kind === "service") {
